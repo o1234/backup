@@ -73,7 +73,7 @@ main (int argc, char *argv[])
 
         uint64_t segmentDuration = 2000000;//ms==> 2s/segment
         // The simulation id is used to distinguish log file results from potentially multiple consequent simulation runs.
-        uint32_t simulationId = 4;
+        uint32_t simulationId = 3;
         uint32_t numberOfClients = 1;
         uint32_t numberOfEnbs = 7;
         std::string adaptationAlgo = "tomato"; //"tobasco2";
@@ -83,7 +83,7 @@ main (int argc, char *argv[])
 	int load = 0;                                                    // 0 for low load, 1 for high load
 	int rlc_mode = 3;                                          // UM = 2; AM = 3
         int tx_mode = 1;
-	int bandwidth=75;	
+	int bandwidth=50;	
 	std::string data_rate="100Gbps";        //100Gbps
 
         CommandLine cmd;
@@ -116,7 +116,7 @@ main (int argc, char *argv[])
 		     "RLC mode[2 = UM | 3 = AM][default:3]",
 		     rlc_mode);
 	cmd.AddValue("tx_mode",
-		     "TX mode[0 = SISO | 2 = MIMO][default:2]",
+		     "TX mode[0 = SISO | 1 = MIMO][default:1]",
 		     tx_mode);
 	cmd.AddValue("BandWidth",
 		     "Dl bandwidth and Ul bandwidth[default=100]",
@@ -276,8 +276,8 @@ main (int argc, char *argv[])
                 MobilityHelper ueMobility_4;
                 ueMobility_4.SetMobilityModel("ns3::ConstantVelocityMobilityModel");
                 ueMobility_4.SetPositionAllocator("ns3::UniformDiscPositionAllocator",
-                                                "X", DoubleValue(-110.0),
-                                                "Y", DoubleValue(-20.0),
+                                                "X", DoubleValue(-150.0),//-110
+                                                "Y", DoubleValue(-20.0),//-20
                                                 "rho", DoubleValue(0));
                 ueMobility_4.Install(ue_nodes.Get(0));
                 Ptr<ConstantVelocityMobilityModel> cvmm = ue_nodes.Get(0)->GetObject<ConstantVelocityMobilityModel>();

@@ -269,6 +269,7 @@ private:
   std::string ChoseInfoPath(int64_t infoindex);
   void GetInfo();
   uint32_t UptoQoE(uint32_t RepLevel);
+  
   uint32_t m_dataSize; //!< packet payload size
   uint8_t *m_data; //!< packet payload data
 
@@ -286,8 +287,8 @@ private:
   int64_t m_currentRepIndex; //!< The index of the currently requested segment quality
   int64_t m_lastSegmentIndex;//!< The index of the last segment, i.e. the total number of segments-1
   int64_t m_segmentCounter; //!< The index of the next segment to be downloaded
-  int64_t m_transmissionStartReceivingSegment; //!< The point in time in microseconds when the transmission of a segment begins
-  int64_t m_transmissionEndReceivingSegment; //!< The point in time in microseconds when the transmission of a segment is finished
+  int64_t m_transmissionStartReceivingSegment=0; //!< The point in time in microseconds when the transmission of a segment begins
+  int64_t m_transmissionEndReceivingSegment=0; //!< The point in time in microseconds when the transmission of a segment is finished
   int64_t m_bytesReceived; //!< Counts the amount of received bytes of the current packet
   int64_t m_bDelay;  //!< Minimum buffer level in microseconds of playback when the next download must be started
   int64_t m_highestRepIndex; //!< This is the index of the highest representation
@@ -308,7 +309,7 @@ private:
   std::ofstream throughputLog; //!< Output stream for logging throughput information
   std::ofstream bufferUnderrunLog; //!< Output stream for logging starting and ending of buffer underruns
 
-  uint64_t m_downloadRequestSent; //!< Logging the point in time in microseconds when a download request was sent to the server
+  uint64_t m_downloadRequestSent=0; //!< Logging the point in time in microseconds when a download request was sent to the server
 
   throughputData m_throughput; //!< Tracking the throughput
   bufferData m_bufferData; //!< Keep track of the buffer level

@@ -55,6 +55,7 @@ double bandwidthEstimate_temp1 = 0.0;
 double bandwidthEstimate_temp2 = 0.0;
 double alpha = 0.1;
 double beta = 0.0;
+static double lastEndTime = 0.0;
 template <typename T>
 std::string ToString(T val)
 {
@@ -66,57 +67,6 @@ std::string ToString(T val)
 
 NS_LOG_COMPONENT_DEFINE ("TcpStreamClientApplication");
 NS_OBJECT_ENSURE_REGISTERED (TcpStreamClient);
-
-static void GetPhyRate(Ptr<PhyRxStatsCalculator> phy_rx_stats)
-{
-  uint32_t cum_tbs = 0;
-  double phy_throughput = 0;
-  phy_stats = phy_rx_stats->GetCorrectTbs();
-  double updateTimescale= 0.0;
-  double timeInter = 0.0;
-  for (uint64_t i = 0; i < phy_stats.size(); i++)
-  {
-    cum_tbs += phy_stats.at(i).tbsize;
-    if (i != (phy_stats.size()-1)){
-      timeInter = (double)(phy_stats.at(i).timestamp - phy_stats.at(i + 1).timestamp) / 1000;
-      //NS_LOG_INFO("timeInter==" << timeInter);
-       if ((phy_stats.at(i).mcs >= 25) && (timeInter > 0.1))
-        {
-            updateTimescale = updateTimescale + timeInter;
-        }
-    }
-  }
-  //NS_LOG_INFO("cum_tbs      " << cum_tbs << "    timeduration   " << (phy_stats.at(phy_stats.size() - 1).timescale));
-  updateTimescale = phy_stats.at(phy_stats.size() - 1).timescale - updateTimescale;
-  phy_throughput = static_cast<double>(cum_tbs) * 8000 / (updateTimescale); //bps
-
-  if (phy_stats.at(phy_stats.size() - 1).gama > 0.3)
-  {
-    alpha = 0.4;
-    beta = 0.7;
-  }
-  else
-  {
-    alpha = 0.4;
-    beta = 0.7;
-  }
-  if (firstOfBwEstimate)
-  {
-    bandwidthEstimate = phy_throughput;
-    bandwidthEstimate_temp1 = phy_throughput;
-    bandwidthEstimate_temp2 = phy_throughput;
-    firstOfBwEstimate = false;
-  }
-  else
-  {
-    //bandwidthEstimate = alpha * phy_throughput + (1 - alpha) * bandwidthEstimate;
-    bandwidthEstimate_temp1 = alpha * phy_throughput +(1-alpha) * bandwidthEstimate_temp1;
-    bandwidthEstimate_temp2 = beta * bandwidthEstimate_temp1 + (1 - beta) * bandwidthEstimate_temp2;
-    bandwidthEstimate = bandwidthEstimate_temp2;
-  }
-}
-
-
 
 void
 TcpStreamClient::Controller (controllerEvent event)
@@ -356,7 +306,7 @@ uint32_t TcpStreamClient::UptoQoE(uint32_t RepLevel)
   uint32_t updateRepLevel(0);
   NS_ASSERT_MSG(RepLevel <= m_highestQoELevel,  "The choosen RepLevel is higher than the index of RepToQoE ");
   if (RepLevel == 0){
-    std::cout <<"###########"<< updateRepLevel<<"\n";
+    //std::cout <<"###########"<< updateRepLevel<<"\n";
     return updateRepLevel;
   }
   else
@@ -367,10 +317,68 @@ uint32_t TcpStreamClient::UptoQoE(uint32_t RepLevel)
     it = find(RepLevelToQoE3D_temp.begin(), RepLevelToQoE3D_temp.end(), *std::max_element(RepLevelToQoE3D_temp.begin(), RepLevelToQoE3D_temp.end()));
     //std::cout <<*it<<"\n";
     updateRepLevel = std::distance(std::begin(RepLevelToQoE3D_temp),it); 
-    std::cout << "###########" << updateRepLevel << "\n";
+    //std::cout << "###########" << updateRepLevel << "\n";
     return updateRepLevel;
   }
 }
+
+static void 
+GetPhyRate(Ptr<PhyRxStatsCalculator> phy_rx_stats, double interTime)
+{
+  std::cout<<"********  interTime  ***** "<<interTime<<"\n";
+  uint32_t cum_tbs = 0;
+  double phy_throughput = 0;
+  phy_stats = phy_rx_stats->GetCorrectTbs();
+  double updateTimescale = 0.0;
+  double max_bandwidthEstimate = 0.0;
+  for (uint64_t i = 0; i < phy_stats.size(); i++)
+  {
+    cum_tbs += phy_stats.at(i).tbsize;
+  }
+  //NS_LOG_INFO("cum_tbs      " << cum_tbs << "    timeduration   " << (phy_stats.at(phy_stats.size() - 1).timescale));
+  updateTimescale = phy_stats.at(phy_stats.size() - 1).timescale - interTime;
+  phy_throughput = static_cast<double>(cum_tbs) * 8000 / (updateTimescale); //bps
+
+  if (phy_stats.at(phy_stats.size() - 1).gama > 0.3)
+  {
+    alpha = 0.4;
+    beta = 0.7;
+  }
+  else
+  {
+    alpha = 0.4;
+    beta = 0.7;
+  }
+  if (firstOfBwEstimate)
+  {
+    bandwidthEstimate = phy_throughput;
+    bandwidthEstimate_temp1 = phy_throughput;
+    bandwidthEstimate_temp2 = phy_throughput;
+    firstOfBwEstimate = false;
+  }
+  else
+  {
+    //bandwidthEstimate = alpha * phy_throughput + (1 - alpha) * bandwidthEstimate;
+    bandwidthEstimate_temp1 = alpha * phy_throughput + (1 - alpha) * bandwidthEstimate_temp1;
+    bandwidthEstimate_temp2 = beta * bandwidthEstimate_temp1 + (1 - beta) * bandwidthEstimate_temp2;
+    bandwidthEstimate = bandwidthEstimate_temp2;
+  }
+  if (max_bandwidthEstimate < bandwidthEstimate)
+  {
+    max_bandwidthEstimate = bandwidthEstimate;
+  }
+  double ave_mcs = 0;
+  for (uint64_t i = 0; i < phy_stats.size(); i++)
+  {
+    ave_mcs = ave_mcs + phy_stats.at(i).mcs;
+  }
+  ave_mcs = ave_mcs / phy_stats.size();
+  if (ave_mcs > 27)
+  {
+    bandwidthEstimate = max_bandwidthEstimate;
+  }
+}
+
 void
 TcpStreamClient::RequestRepIndex ()
 {
@@ -391,7 +399,6 @@ TcpStreamClient::RequestRepIndex ()
   }
   else if(m_algoName == "tobasco2")
   {
-    Simulator::Schedule(Seconds((double)Simulator::Now().GetMilliSeconds() / 1000 ), &GetPhyRate, cm_crossLayerInfo);
     userinfoanswer = userinfoAlgo->UserinfoAlgo(m_segmentCounter, m_clientId ,0, 0);
     bandwidthanswer = bandwidthAlgo->BandwidthAlgo(m_segmentCounter, m_clientId , bandwidthEstimate, 0);
     bufferanswer = bufferAlgo->BufferAlgo (m_segmentCounter, m_clientId , 0, 10000000);
@@ -400,14 +407,17 @@ TcpStreamClient::RequestRepIndex ()
   }
   else if (m_algoName == "tomato")
   {
-    //Simulator::Schedule(Seconds((double)Simulator::Now().GetMilliSeconds() / 1000 ), &GetPhyRate, cm_crossLayerInfo);
-    Simulator::Schedule(Seconds((double)m_downloadRequestSent / (double)1000000), &GetPhyRate, cm_crossLayerInfo);
+    std::cout << "  m_downloadRequest   " << m_downloadRequestSent / (double)1000000 << "   m_transmissionStart    " << m_transmissionStartReceivingSegment / (double)1000000 << "  m_transmissionEnd    " << m_transmissionEndReceivingSegment / (double)1000000 << "\n";
+    double interTime = m_downloadRequestSent / (double)1000000 - lastEndTime;
+    //Simulator::Schedule(MicroSeconds((double)m_downloadRequestSent), &GetPhyRate, cm_crossLayerInfo);
+    Simulator::Schedule(MicroSeconds((double)100), &GetPhyRate, cm_crossLayerInfo, interTime);
+    lastEndTime = m_transmissionEndReceivingSegment / (double)1000000;
     userinfoanswer = userinfoAlgo->UserinfoAlgo(m_segmentCounter, m_clientId, 0, 0); 
     bandwidthanswer = bandwidthAlgo->BandwidthAlgo(m_segmentCounter, m_clientId, 0, 0);
     bufferanswer = bufferAlgo->BufferAlgo(m_segmentCounter, m_clientId, 0, 10000000);
-    answer = algo->GetNextRep(m_segmentCounter, m_clientId, bandwidthanswer.bandwidthEstimate, 0);
-    //answer = algo->GetNextRep(m_segmentCounter, m_clientId, bandwidthEstimate, 0);
-    std::cout << "answer.nextRepIndex  " << answer.nextRepIndex<<"\n";
+    //answer = algo->GetNextRep(m_segmentCounter, m_clientId, bandwidthanswer.bandwidthEstimate, 0);
+    answer = algo->GetNextRep(m_segmentCounter, m_clientId, bandwidthEstimate, 0);
+    std::cout << "answer.nextRepIndex  " << answer.nextRepIndex << "    bandwidthEstimate  " << bandwidthEstimate<<"\n";
     answer.nextRepIndex = UptoQoE((uint32_t)(answer.nextRepIndex));
   }
   else if (m_algoName == "festive")
@@ -439,7 +449,7 @@ TcpStreamClient::RequestRepIndex ()
   m_currentRepIndex = answer.nextRepIndex;
 
   NS_ASSERT_MSG (answer.nextRepIndex <= m_highestRepIndex, "The algorithm returned a representation index that's higher than the maximum");
-
+/*
   NS_LOG_DEBUG("***At Time :" << std::fixed << std::setprecision(3) << answer.decisionTime / 1000000.0
                               << ", Id " << m_clientId
                               << ", Index " << m_segmentCounter
@@ -447,7 +457,7 @@ TcpStreamClient::RequestRepIndex ()
                               << ", EstimateBW " << std::fixed << std::setprecision(3) << answer.estimateTh / 1000000.0 << "Mbps"
                               << ", Dealy " << std::fixed << std::setprecision(3) << answer.nextDownloadDelay / 1000000.0 << "Sec"
                               << "  ***");
-
+*/
   m_playbackData.playbackIndex.push_back (answer.nextRepIndex);
   m_bDelay = answer.nextDownloadDelay;
   LogAdaptation (answer);
@@ -834,33 +844,33 @@ TcpStreamClient::InitializeLogFiles (std::string simulationId, std::string clien
 
   std::string dLog = "mylogs/" + m_algoName + "/" +  numberOfClients  + "/sim" + simulationId + "_" + "cl" + clientId + "_"  + "downloadLog.txt";
   downloadLog.open (dLog.c_str());
-  downloadLog << "SegIndex ReqSent  DoStart  DownEnd  SegSize  eachDownRate UserStatus\n";//
-  downloadLog.flush ();
+  //downloadLog << "SegIndex ReqSent  DoStart  DownEnd  SegSize  eachDownRate UserStatus\n";//
+  //downloadLog.flush ();
 
   std::string pLog = "mylogs/" + m_algoName + "/" +  numberOfClients  + "/sim" + simulationId + "_" + "cl" + clientId + "_"  + "playbackLog.txt";
   playbackLog.open (pLog.c_str());
-  playbackLog << "SegIndex PlayStart RepLevel UserStatus\n";//6 11 7 10
-  playbackLog.flush ();
+  //playbackLog << "SegIndex PlayStart RepLevel UserStatus\n";//6 11 7 10
+ // playbackLog.flush ();
 
   std::string aLog = "mylogs/" + m_algoName + "/" +  numberOfClients  + "/sim" + simulationId + "_" + "cl" + clientId + "_"  + "adaptationLog.txt";
   adaptationLog.open (aLog.c_str());
-  adaptationLog << "SegIndex RepLevel DecisionTime EstimateTh Case DCase UserStatus\n";
-  adaptationLog.flush ();
+  //adaptationLog << "SegIndex RepLevel DecisionTime EstimateTh Case DCase UserStatus\n";
+  //adaptationLog.flush ();
 
   std::string bLog = "mylogs/" + m_algoName + "/" +  numberOfClients  + "/sim" + simulationId + "_" + "cl" + clientId + "_"  + "bufferLog.txt";
   bufferLog.open (bLog.c_str());
-  bufferLog << "  AtTime BufferLevel BufferNew \n";
-  bufferLog.flush ();
+  //bufferLog << "  AtTime BufferLevel BufferNew \n";
+  //bufferLog.flush ();
 
   std::string tLog = "mylogs/" + m_algoName + "/" +  numberOfClients  + "/sim" + simulationId + "_" + "cl" + clientId + "_"  + "throughputLog.txt";
   throughputLog.open (tLog.c_str());
-  throughputLog << "  AtTime  PacketSize/byte \n";
-  throughputLog.flush ();
+  //throughputLog << "  AtTime  PacketSize/byte \n";
+  //throughputLog.flush ();
 
   std::string buLog = "mylogs/" + m_algoName + "/" +  numberOfClients  + "/sim" + simulationId + "_" + "cl" + clientId + "_"  + "bufferUnderrunLog.txt";
   bufferUnderrunLog.open (buLog.c_str());
-  bufferUnderrunLog << ("StarteTime  EndTime  Sum\n");
-  bufferUnderrunLog.flush ();
+  //bufferUnderrunLog << ("StarteTime  EndTime  Sum\n");
+  //bufferUnderrunLog.flush ();
 }
 
 } // Namespace ns3
