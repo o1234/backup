@@ -300,14 +300,17 @@ TcpStreamClient::~TcpStreamClient()
   m_data = 0;
   m_dataSize = 0;
 }
-uint32_t TcpStreamClient::UptoQoE(uint32_t RepLevel)
+algorithmReply
+TcpStreamClient::UptoQoE(algorithmReply answer) 
 {
+  uint32_t RepLevel = answer.nextRepIndex;
   uint32_t m_highestQoELevel = (RepLevelToQoE3D.size() - 1);
-  uint32_t updateRepLevel(0);
   NS_ASSERT_MSG(RepLevel <= m_highestQoELevel,  "The choosen RepLevel is higher than the index of RepToQoE ");
   if (RepLevel == 0){
     //std::cout <<"###########"<< updateRepLevel<<"\n";
-    return updateRepLevel;
+    answer.nextRepIndex = 0;//10M repLevelIndex
+    answer.QoE3D = 3.2;//10M repLevelBW
+     return answer;
   }
   else
   {
@@ -316,16 +319,17 @@ uint32_t TcpStreamClient::UptoQoE(uint32_t RepLevel)
     std::vector<double>::iterator it;
     it = find(RepLevelToQoE3D_temp.begin(), RepLevelToQoE3D_temp.end(), *std::max_element(RepLevelToQoE3D_temp.begin(), RepLevelToQoE3D_temp.end()));
     //std::cout <<*it<<"\n";
-    updateRepLevel = std::distance(std::begin(RepLevelToQoE3D_temp),it); 
+    answer.nextRepIndex = std::distance(std::begin(RepLevelToQoE3D_temp), it);
     //std::cout << "###########" << updateRepLevel << "\n";
-    return updateRepLevel;
+    answer.QoE3D = *it;
+    return answer;
   }
 }
 
 static void 
 GetPhyRate(Ptr<PhyRxStatsCalculator> phy_rx_stats, double interTime)
 {
-  std::cout<<"********  interTime  ***** "<<interTime<<"\n";
+  //std::cout<<"********  interTime  ***** "<<interTime<<"\n";
   uint32_t cum_tbs = 0;
   double phy_throughput = 0;
   phy_stats = phy_rx_stats->GetCorrectTbs();
@@ -395,7 +399,7 @@ TcpStreamClient::RequestRepIndex ()
     bandwidthanswer = bandwidthAlgo->BandwidthAlgo(m_segmentCounter, m_clientId  , 0, 0);
     bufferanswer = bufferAlgo->BufferAlgo (m_segmentCounter, m_clientId , 0, 10000000);
     answer = algo->GetNextRep ( m_segmentCounter, m_clientId , bandwidthanswer.bandwidthEstimate, 0);
-    answer.nextRepIndex = UptoQoE((uint32_t)answer.nextRepIndex);
+    answer = UptoQoE(answer);
   }
   else if(m_algoName == "tobasco2")
   {
@@ -403,11 +407,11 @@ TcpStreamClient::RequestRepIndex ()
     bandwidthanswer = bandwidthAlgo->BandwidthAlgo(m_segmentCounter, m_clientId , bandwidthEstimate, 0);
     bufferanswer = bufferAlgo->BufferAlgo (m_segmentCounter, m_clientId , 0, 10000000);
     answer = algo->GetNextRep ( m_segmentCounter, m_clientId , bandwidthanswer.bandwidthEstimate, 0);
-    answer.nextRepIndex = UptoQoE((uint32_t)answer.nextRepIndex);
+    answer = UptoQoE(answer);
   }
   else if (m_algoName == "tomato")
   {
-    std::cout << "  m_downloadRequest   " << m_downloadRequestSent / (double)1000000 << "   m_transmissionStart    " << m_transmissionStartReceivingSegment / (double)1000000 << "  m_transmissionEnd    " << m_transmissionEndReceivingSegment / (double)1000000 << "\n";
+    //std::cout << "  m_downloadRequest   " << m_downloadRequestSent / (double)1000000 << "   m_transmissionStart    " << m_transmissionStartReceivingSegment / (double)1000000 << "  m_transmissionEnd    " << m_transmissionEndReceivingSegment / (double)1000000 << "\n";
     double interTime = m_downloadRequestSent / (double)1000000 - lastEndTime;
     //Simulator::Schedule(MicroSeconds((double)m_downloadRequestSent), &GetPhyRate, cm_crossLayerInfo);
     Simulator::Schedule(MicroSeconds((double)100), &GetPhyRate, cm_crossLayerInfo, interTime);
@@ -417,8 +421,8 @@ TcpStreamClient::RequestRepIndex ()
     bufferanswer = bufferAlgo->BufferAlgo(m_segmentCounter, m_clientId, 0, 10000000);
     //answer = algo->GetNextRep(m_segmentCounter, m_clientId, bandwidthanswer.bandwidthEstimate, 0);
     answer = algo->GetNextRep(m_segmentCounter, m_clientId, bandwidthEstimate, 0);
-    std::cout << "answer.nextRepIndex  " << answer.nextRepIndex << "    bandwidthEstimate  " << bandwidthEstimate<<"\n";
-    answer.nextRepIndex = UptoQoE((uint32_t)(answer.nextRepIndex));
+    //std::cout << "answer.nextRepIndex  " << answer.nextRepIndex << "    bandwidthEstimate  " << bandwidthEstimate<<"\n";
+    answer = UptoQoE(answer);
   }
   else if (m_algoName == "festive")
   {
@@ -426,14 +430,14 @@ TcpStreamClient::RequestRepIndex ()
     bandwidthanswer = bandwidthAlgo->BandwidthAlgo(m_segmentCounter, m_clientId, 0, 0);
     bufferanswer = bufferAlgo->BufferAlgo(m_segmentCounter, m_clientId, 0, 10000000);
     answer = algo->GetNextRep(m_segmentCounter, m_clientId, bandwidthanswer.bandwidthEstimate, 0);
-    answer.nextRepIndex = UptoQoE((uint32_t)answer.nextRepIndex);
+    answer = UptoQoE(answer);
   }
   else if (m_algoName == "constbitrate") //constant bitrate
   {
     userinfoanswer = userinfoAlgo->UserinfoAlgo(m_segmentCounter, m_clientId, 0, 0);
     bandwidthanswer = bandwidthAlgo->BandwidthAlgo(m_segmentCounter, m_clientId, 0, 0);
     bufferanswer = bufferAlgo->BufferAlgo(m_segmentCounter, m_clientId, 0, 10000000);
-    int64_t constRepIndex = 4;//setRepIndex
+    int64_t constRepIndex = 0;//setRepIndex
     answer = algo->GetNextRep(m_segmentCounter, m_clientId, bandwidthanswer.bandwidthEstimate, constRepIndex); 
   }
 
@@ -449,7 +453,7 @@ TcpStreamClient::RequestRepIndex ()
   m_currentRepIndex = answer.nextRepIndex;
 
   NS_ASSERT_MSG (answer.nextRepIndex <= m_highestRepIndex, "The algorithm returned a representation index that's higher than the maximum");
-/*
+
   NS_LOG_DEBUG("***At Time :" << std::fixed << std::setprecision(3) << answer.decisionTime / 1000000.0
                               << ", Id " << m_clientId
                               << ", Index " << m_segmentCounter
@@ -457,7 +461,7 @@ TcpStreamClient::RequestRepIndex ()
                               << ", EstimateBW " << std::fixed << std::setprecision(3) << answer.estimateTh / 1000000.0 << "Mbps"
                               << ", Dealy " << std::fixed << std::setprecision(3) << answer.nextDownloadDelay / 1000000.0 << "Sec"
                               << "  ***");
-*/
+
   m_playbackData.playbackIndex.push_back (answer.nextRepIndex);
   m_bDelay = answer.nextDownloadDelay;
   LogAdaptation (answer);

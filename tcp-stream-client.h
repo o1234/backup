@@ -268,8 +268,8 @@ private:
 
   std::string ChoseInfoPath(int64_t infoindex);
   void GetInfo();
-  uint32_t UptoQoE(uint32_t RepLevel);
-  
+  algorithmReply UptoQoE(algorithmReply answer);
+
   uint32_t m_dataSize; //!< packet payload size
   uint8_t *m_data; //!< packet payload data
 
@@ -316,6 +316,7 @@ private:
   playbackData m_playbackData; //!< Tracking the simulated playback of segments
   videoData m_videoData; //!< Information about segment sizes, average bitrates of representation levels and segment duration in microseconds
  Ptr<PhyRxStatsCalculator> cm_crossLayerInfo;//add
+ /*
  const std::vector<double> RepLevelToQoE3D = {
      4.8, //  Rep Level 0
      5,   //  Rep Level 1
@@ -323,6 +324,19 @@ private:
      7.2, //  Rep Level 3
      7.8, //  Rep Level 4
      6.2  //  Rep Level 5
+ };       // according to chen
+ */
+ const std::vector<double> RepLevelToQoE3D = {
+     3.2, //  Rep Level 10M
+     4.8, //  Rep Level 20M
+     5.2, //  Rep Level 30M
+     5.4, //  Rep Level 40M
+     7.3, //  Rep Level 50M
+     7.6, //  Rep Level 60M
+     7.8, //  Rep Level 70M
+     8.2, //  Rep Level 80M
+     8.5, //  Rep Level 90M
+     8.7//  Rep Level 100M
  };       // according to chen
 };
 
