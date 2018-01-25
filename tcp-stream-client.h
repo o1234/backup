@@ -34,6 +34,7 @@
 #include "adapationtomato.h"
 #include "adapationfestive.h"
 #include "adapationconstbitrate.h"
+#include "adapationconstbitrate2.h"
 #include "bufferclean.h"
 #include "bufferadaptive.h"
 #include "bandwidthavgintime.h"

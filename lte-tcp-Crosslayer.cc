@@ -76,13 +76,13 @@ main (int argc, char *argv[])
         uint32_t simulationId = 3;
         uint32_t numberOfClients = 1;
         uint32_t numberOfEnbs = 7;
-        std::string adaptationAlgo = "tomato"; //"tobasco2";
+        std::string adaptationAlgo = "constbitrate"; //"tobasco2";
         std::string app_type = "Dash";                  //Bulk sender | On-Off Sender | Dash
 	double eNbTxPower = 43.0;                      //43
 	int fading_model = 0;                                  // 0 for etu, 1 for eva
 	int load = 0;                                                    // 0 for low load, 1 for high load
 	int rlc_mode = 3;                                          // UM = 2; AM = 3
-        int tx_mode = 1;
+        int tx_mode = 2;
 	int bandwidth=50;	
 	std::string data_rate="100Gbps";        //100Gbps
 
@@ -94,6 +94,9 @@ main (int argc, char *argv[])
         cmd.AddValue("numberOfClients", 
                       "The number of clients", 
                       numberOfClients);
+        cmd.AddValue("numberOfEnbs",
+                     "The number of eNodeBs",
+                     numberOfEnbs);
         cmd.AddValue("segmentDuration", 
                       "The duration of a video segment in microseconds",
                       segmentDuration);
@@ -276,13 +279,21 @@ main (int argc, char *argv[])
                 MobilityHelper ueMobility_4;
                 ueMobility_4.SetMobilityModel("ns3::ConstantVelocityMobilityModel");
                 ueMobility_4.SetPositionAllocator("ns3::UniformDiscPositionAllocator",
-                                                "X", DoubleValue(-150.0),//-110
-                                                "Y", DoubleValue(-20.0),//-20
+                                                "X", DoubleValue(-90.0),//-110
+                                                "Y", DoubleValue(-0.0),//-20
                                                 "rho", DoubleValue(0));
-                ueMobility_4.Install(ue_nodes.Get(0));
+                /*ueMobility_4.Install(ue_nodes.Get(0));
                 Ptr<ConstantVelocityMobilityModel> cvmm = ue_nodes.Get(0)->GetObject<ConstantVelocityMobilityModel>();
-                cvmm->SetVelocity(Vector(0.83333, 0.0, 0.0));
-        break;}
+                cvmm->SetVelocity(Vector(0.83333, 0.0, 0.0));*/
+                ueMobility_4.Install(ue_nodes);
+                for (int64_t i = 0; i<ue_nodes.GetN();i++){
+                        Ptr<ConstantVelocityMobilityModel> cvmm = ue_nodes.Get(i)->GetObject<ConstantVelocityMobilityModel>();
+                        cvmm->SetVelocity(Vector(0.83333, 0.0, 0.0));
+                }
+            
+                
+                break;
+        }
         //eva 60kmph++
         case 4:{
                 MobilityHelper ueMobility_5;
@@ -304,7 +315,8 @@ main (int argc, char *argv[])
 	ueIpIface = epcHelper->AssignUeIpv4Address(NetDeviceContainer(ue_devs));
         if (simulationId==3)
         {
-                lteHelper->Attach(ue_devs.Get(0), eNb_devs.Get(0));
+                //lteHelper->Attach(ue_devs.Get(0), eNb_devs.Get(0));
+                lteHelper->AttachToClosestEnb(ue_devs, eNb_devs);
         }else if(simulationId==4) 
         {
                 lteHelper->Attach(ue_devs.Get(0), eNb_devs.Get(0));                
@@ -329,12 +341,13 @@ main (int argc, char *argv[])
 
         // Determin client nodes for object creation with client helper class 
         std::vector <std::pair <Ptr<Node>, std::string> > clients;
-        for (NodeContainer::Iterator i = ue_nodes.Begin (); i != ue_nodes.End (); ++i)
+        std::pair <Ptr<Node>, std::string> client (ue_nodes.Get(0), adaptationAlgo);//ue0 applying Dash,other ue applying udp
+        clients.push_back (client);
+       /* for (NodeContainer::Iterator i = ue_nodes.Begin ()+1; i != ue_nodes.End (); ++i)
         {
-                std::pair <Ptr<Node>, std::string> client (*i, adaptationAlgo);//*i
-                clients.push_back (client);
-        } 
-
+                std::pair <Ptr<Node>, std::string> other_client (*i, "constbitrate2");//  *i
+                clients.push_back (other_client);
+         } */
         if (app_type.compare("Dash")==0 ){
         
         const Ptr<PhyRxStatsCalculator> lte_phy_rx_stats = lteHelper->GetPhyRxStats();
@@ -350,15 +363,19 @@ main (int argc, char *argv[])
         clientHelper.SetAttribute ("SimulationId", UintegerValue (simulationId));
         
         ApplicationContainer clientApps = clientHelper.Install (clients);
-        for (uint i = 0; i < clientApps.GetN (); i++)
+        clientApps.Get (0)->SetStartTime (Seconds (2.0));
+        /*for (uint i = 1; i < clientApps.GetN (); i++)
         {
-              double startTime = 2.0 + ((i * 3) / 100.0) ;
+              double startTime = 30.0 + ((i * 3) / 100.0) ;
               clientApps.Get (i)->SetStartTime (Seconds (startTime));
-        }
-          
+              double leaveTime = 60 +(i*3.0);
+              clientApps.Get(i)->SetStopTime(Seconds(leaveTime));
+        }*/
+
+       
         NS_LOG_INFO ("Run Simulation.");
         NS_LOG_INFO ("Sim:   " << simulationId << "   Clients:   " << numberOfClients);
-        Simulator::Stop(Seconds(100));
+        Simulator::Stop(Seconds(70));
         Simulator::Run ();
         Simulator::Destroy ();
         NS_LOG_INFO ("Done.");
