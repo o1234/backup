@@ -334,10 +334,11 @@ private:
      5.4, //  Rep Level 40M
      7.3, //  Rep Level 50M
      7.6, //  Rep Level 60M
-     7.8, //  Rep Level 70M
+     //7.8, //  Rep Level 70M
+     8.0, //  Rep Level 70M update on 1.30
      8.2, //  Rep Level 80M
      8.5, //  Rep Level 90M
-     8.7//  Rep Level 100M
+     8.7  //  Rep Level 100M
  };       // according to chen
 };
 

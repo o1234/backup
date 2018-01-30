@@ -539,10 +539,10 @@ TcpStreamClient::ChoseInfoPath(int64_t infoindex)
       case 5: infoStatusTemp="4K_View_5.txt";break;
       default: infoStatusTemp="4K_View_0.txt";break;*/
   case 1:
-    infoStatusTemp = "SegmentSize_0.txt";
+    infoStatusTemp = "SegmentSize_360s.txt";
     break;
   default:
-    infoStatusTemp = "SegmentSize_0.txt";
+    infoStatusTemp = "SegmentSize_360s.txt";
     break;
    }
 
@@ -552,7 +552,7 @@ void
 TcpStreamClient::GetInfo()
 {
   //std::ifstream myinfo("UserInfo.txt");
-  std::ifstream myinfo("UserInfo_100M.txt");
+  std::ifstream myinfo("UserInfo_360s.txt");
   for (int64_t s; myinfo >> s;)
     m_videoData.userInfo.push_back(s);
 }
