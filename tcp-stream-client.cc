@@ -49,6 +49,7 @@
 namespace ns3 {
 
 std::deque<PhyRxStatsCalculator::Time_Tbs> phy_stats;
+std::vector<std::pair<int64_t,int64_t>> pause;//<Pause BeginTime,Pause End Time>
 bool firstOfBwEstimate = true;
 bool secondOfBwEstimate = true;
 double bandwidthEstimate = 0.0;
@@ -56,7 +57,7 @@ double bandwidthEstimate_temp1 = 0.0;
 double bandwidthEstimate_temp2 = 0.0;
 double alpha = 0.1;
 double beta = 0.0;
-double traceBegin=0.0;
+int64_t traceBegin=0.0;
 static double lastEndTime = 0.0;
 template <typename T>
 std::string ToString(T val)
@@ -337,15 +338,20 @@ TcpStreamClient::UptoQoE(algorithmReply answer)
 }
 
 static void 
-GetPhyRate(Ptr<PhyRxStatsCalculator> phy_rx_stats, double StartTime, double EndTime,double traceBegin)
+GetPhyRate(Ptr<PhyRxStatsCalculator> phy_rx_stats, int64_t StartTime, int64_t EndTime,int64_t traceBegin)
 {
-  
+  //std::cout<<"********  interTime  ***** "<<interTime<<"\n";
   uint32_t cum_tbs = 0;
   double phy_throughput = 0;
   phy_stats = phy_rx_stats->GetCorrectTbs();
   double updateTimescale = 0.0;
-  double max_bandwidthEstimate = 0.0;
   std::vector<std::pair<int64_t,int64_t>> new_stats;
+
+  std::pair<int64_t,int64_t> pausetemp;
+  pausetemp.first=StartTime;
+  pausetemp.second=EndTime;
+  pause.push_back(pausetemp);
+
   for (uint64_t i = 0; i < phy_stats.size(); i++)
   {
     std::pair<int64_t,int64_t> temp;
@@ -353,18 +359,33 @@ GetPhyRate(Ptr<PhyRxStatsCalculator> phy_rx_stats, double StartTime, double EndT
     temp.second=(int64_t)phy_stats.at(i).tbsize;
     if(temp.first>traceBegin&&traceBegin>0)
       new_stats.push_back(temp);
-    }
-  for(uint64_t i=0;i<new_stats.size();i++){
-    cum_tbs += new_stats.at(i).second;
-    }
-      if(0<phy_stats.at(phy_stats.size()-1).timestamp&&phy_stats.at(phy_stats.size()-1).timestamp  < StartTime){
-            updateTimescale = phy_stats.at(phy_stats.size() - 1).timescale - (EndTime-StartTime);
-      }else if((phy_stats.at(phy_stats.size()-1).timestamp > StartTime )&& (0<phy_stats.at(phy_stats.size()-1).timestamp&&phy_stats.at(phy_stats.size()-1).timestamp < EndTime)){
-            updateTimescale = phy_stats.at(phy_stats.size() - 1).timescale - (EndTime-phy_stats.at(phy_stats.size()-1).timestamp);
-      }else{
-            updateTimescale = phy_stats.at(phy_stats.size() - 1).timescale;
+  }
+//digout pause time
+  if(new_stats.empty())
+      phy_throughput = 0;
+  else{
+      for (uint64_t i = 0; i < new_stats.size(); i++)
+      {
+        cum_tbs += new_stats.at(i).second;
       }
+    int64_t scale = new_stats.at(0).first - new_stats.at(new_stats.size()-1).first;
+    updateTimescale = scale;
+    for (uint64_t i = 0; i < pause.size(); i++)
+    {
+    StartTime = pause.at(i).first;
+    EndTime = pause.at(i).second;
+    if (0 < new_stats.at(new_stats.size() - 1).first && new_stats.at(new_stats.size() - 1).first < StartTime && new_stats.at(0).first > EndTime)
+    {
+      updateTimescale = updateTimescale - (EndTime - StartTime);
+    }
+    else if ((new_stats.at(new_stats.size() - 1).first > StartTime) && (0 < new_stats.at(new_stats.size() - 1).first && new_stats.at(new_stats.size() - 1).first < EndTime))
+    {
+      updateTimescale = updateTimescale - (EndTime - new_stats.at(new_stats.size() - 1).first);
+    }
+  }
   phy_throughput = static_cast<double>(cum_tbs) * 8000 / (updateTimescale); //bps
+  }
+//end
   if (phy_stats.at(phy_stats.size() - 1).gama > 0.3)
   {
     alpha = 0.2;
@@ -390,22 +411,14 @@ GetPhyRate(Ptr<PhyRxStatsCalculator> phy_rx_stats, double StartTime, double EndT
       bandwidthEstimate_temp2 = bandwidthEstimate_temp1;
       secondOfBwEstimate = false;
     }else{
+    //bandwidthEstimate = alpha * phy_throughput + (1 - alpha) * bandwidthEstimate;
     bandwidthEstimate_temp1 = alpha * phy_throughput + (1 - alpha) * bandwidthEstimate_temp1;
     bandwidthEstimate_temp2 = beta * bandwidthEstimate_temp1 + (1 - beta) * bandwidthEstimate_temp2;
     bandwidthEstimate = 2 * bandwidthEstimate_temp1 - bandwidthEstimate_temp2 + beta / (1 - beta) * (bandwidthEstimate_temp1 - bandwidthEstimate_temp2);
+    //bandwidthEstimate = bandwidthEstimate_temp2;
     }
   }
-  if (max_bandwidthEstimate < bandwidthEstimate)
-  {
-    max_bandwidthEstimate = bandwidthEstimate;
-  }
-  double ave_mcs = 0;
-  for (uint64_t i = 0; i < phy_stats.size(); i++)
-  {
-    ave_mcs = ave_mcs + phy_stats.at(i).mcs;
-  }
-  ave_mcs = ave_mcs / phy_stats.size();
-  bandwidthEstimate = phy_throughput;
+  //bandwidthEstimate = phy_throughput;
 }
 
 void
@@ -455,17 +468,16 @@ TcpStreamClient::RequestRepIndex ()
   else if (m_algoName == "constbitrate") //constant bitrate
   {
     std::cout << "m_clientId  " << m_clientId << "  m_downloadRequest   " << m_downloadRequestSent / (double)1000000 << "   m_transmissionStart    " << m_transmissionStartReceivingSegment / (double)1000000 << "  m_transmissionEnd    " << m_transmissionEndReceivingSegment / (double)1000000 << "\n";
-    double EndTime = m_downloadRequestSent / (double)1000000;
-    double StartTime = lastEndTime; //lastDownloadEnd==CurrentPauseStart
-    std::cout << "******* " << StartTime << " ***** " << EndTime << "\n";
-    Simulator::Schedule(MicroSeconds((double)100), &GetPhyRate, cm_crossLayerInfo, StartTime, EndTime,traceBegin/1000);
-    lastEndTime = m_transmissionEndReceivingSegment / (double)1000000;
+    int64_t EndTime = m_downloadRequestSent / 1000;
+    int64_t StartTime = lastEndTime; //lastDownloadEnd==CurrentPauseStart
+    Simulator::Schedule(MicroSeconds((double)100), &GetPhyRate, cm_crossLayerInfo, StartTime, EndTime,traceBegin);
+    lastEndTime = m_transmissionEndReceivingSegment / 1000;
     userinfoanswer = userinfoAlgo->UserinfoAlgo(m_segmentCounter, m_clientId, 0, 0);
     bandwidthanswer = bandwidthAlgo->BandwidthAlgo(m_segmentCounter, m_clientId, 0, 0);
     bufferanswer = bufferAlgo->BufferAlgo(m_segmentCounter, m_clientId, 0, 10000000);
-    int64_t constRepIndex =4;//setRepIndex
+    int64_t constRepIndex =0;//setRepIndex
     answer = algo->GetNextRep(m_segmentCounter, m_clientId, bandwidthEstimate, constRepIndex); 
-    if(secondOfBwEstimate==true) traceBegin=answer.decisionTime;
+    if(secondOfBwEstimate==true) traceBegin=(int64_t)answer.decisionTime/1000;//ms
     std::cout << "At time " << answer.decisionTime / 1000000.0 << "clientId" << m_clientId << " choose  answer.nextRepIndex  " << answer.nextRepIndex << "    CrossLayerbandwidthEstimate  " << bandwidthEstimate / 1000000 << "Mbps"
               << "\n";
   }
