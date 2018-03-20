@@ -337,12 +337,33 @@ TcpStreamClient::UptoQoE(algorithmReply answer)
   }
 }
 
+int64_t 
+updateScale(int64_t scale, std::vector<std::pair<int64_t,int64_t>> pause, std::vector<std::pair<int64_t,int64_t> > new_stats)
+{
+ int64_t updateTimescale = scale;
+ if(pause.empty()||new_stats.empty()) return updateTimescale;
+ for (uint64_t i = 0; i < pause.size(); i++)
+    {
+    int64_t StartTime = pause.at(i).first;
+    int64_t EndTime = pause.at(i).second;
+    if (0 < new_stats.at(new_stats.size() - 1).first && new_stats.at(new_stats.size() - 1).first < StartTime && new_stats.at(0).first > EndTime)
+    {
+      updateTimescale = updateTimescale - (EndTime - StartTime);
+    }else if ((new_stats.at(new_stats.size() - 1).first > StartTime) && (0 < new_stats.at(new_stats.size() - 1).first && new_stats.at(new_stats.size() - 1).first < EndTime))
+    {
+      updateTimescale = updateTimescale - (EndTime - new_stats.at(new_stats.size() - 1).first);
+    }
+  }
+  return updateTimescale;
+}
+
 static void 
 GetPhyRate(Ptr<PhyRxStatsCalculator> phy_rx_stats, int64_t StartTime, int64_t EndTime,int64_t traceBegin)
 {
   //std::cout<<"********  interTime  ***** "<<interTime<<"\n";
   uint32_t cum_tbs = 0;
-  double phy_throughput = 0;
+  //std::vector<double>  TH_vec ;
+  double phy_throughput=0;
   phy_stats = phy_rx_stats->GetCorrectTbs();
   double updateTimescale = 0.0;
   std::vector<std::pair<int64_t,int64_t>> new_stats;
@@ -360,65 +381,73 @@ GetPhyRate(Ptr<PhyRxStatsCalculator> phy_rx_stats, int64_t StartTime, int64_t En
     if(temp.first>traceBegin&&traceBegin>0)
       new_stats.push_back(temp);
   }
-//digout pause time
-  if(new_stats.empty())
-      phy_throughput = 0;
-  else{
+  if(new_stats.size()>0){
       for (uint64_t i = 0; i < new_stats.size(); i++)
-      {
+     {
         cum_tbs += new_stats.at(i).second;
       }
-    int64_t scale = new_stats.at(0).first - new_stats.at(new_stats.size()-1).first;
-    updateTimescale = scale;
-    for (uint64_t i = 0; i < pause.size(); i++)
-    {
-    StartTime = pause.at(i).first;
-    EndTime = pause.at(i).second;
-    if (0 < new_stats.at(new_stats.size() - 1).first && new_stats.at(new_stats.size() - 1).first < StartTime && new_stats.at(0).first > EndTime)
-    {
-      updateTimescale = updateTimescale - (EndTime - StartTime);
+       int64_t scale = new_stats.at(0).first - new_stats.at(new_stats.size()-1).first;
+       updateTimescale= updateScale(scale,  pause,  new_stats);
+       phy_throughput= ( static_cast<double>(cum_tbs) * 8000 / (updateTimescale)); //bps   
+    }else{
+       phy_throughput=10*1e6;
     }
-    else if ((new_stats.at(new_stats.size() - 1).first > StartTime) && (0 < new_stats.at(new_stats.size() - 1).first && new_stats.at(new_stats.size() - 1).first < EndTime))
-    {
-      updateTimescale = updateTimescale - (EndTime - new_stats.at(new_stats.size() - 1).first);
-    }
-  }
-  phy_throughput = static_cast<double>(cum_tbs) * 8000 / (updateTimescale); //bps
-  }
-//end
+  //NS_LOG_INFO("===cum_tbs " << cum_tbs << "====Pause startTime " << (double)StartTime/1000 <<"====Pause endTime " << (double)EndTime/1000 << " =====updateTimescale " << (double)updateTimescale/1000 << "   =====InstantBW   " << phy_throughput / 1000000 << "Mbps");
   if (phy_stats.at(phy_stats.size() - 1).gama > 0.3)
   {
     alpha = 0.2;
     beta = 0.8;
-  }
-  else
-  {
+  }else{
     alpha = 0.2;
     beta = 0.8;
   }
-  if (firstOfBwEstimate)
-  {
-    bandwidthEstimate = 0;
-    bandwidthEstimate_temp1 = bandwidthEstimate;
-    firstOfBwEstimate = false;
-  }
-  else
-  {
-    if (secondOfBwEstimate)
-    {
-      bandwidthEstimate = (phy_throughput+bandwidthEstimate_temp1)/2;
-      bandwidthEstimate_temp1 = alpha * phy_throughput + (1 - alpha) * bandwidthEstimate_temp1;
-      bandwidthEstimate_temp2 = bandwidthEstimate_temp1;
-      secondOfBwEstimate = false;
-    }else{
-    //bandwidthEstimate = alpha * phy_throughput + (1 - alpha) * bandwidthEstimate;
-    bandwidthEstimate_temp1 = alpha * phy_throughput + (1 - alpha) * bandwidthEstimate_temp1;
-    bandwidthEstimate_temp2 = beta * bandwidthEstimate_temp1 + (1 - beta) * bandwidthEstimate_temp2;
-    bandwidthEstimate = 2 * bandwidthEstimate_temp1 - bandwidthEstimate_temp2 + beta / (1 - beta) * (bandwidthEstimate_temp1 - bandwidthEstimate_temp2);
-    //bandwidthEstimate = bandwidthEstimate_temp2;
+  bool smooth=false;//true: old smooth /  false: holt smooth
+  if(smooth){
+    //************ do not understand*************
+    alpha=0.2;beta=0.8;
+    if (firstOfBwEstimate)
+      {
+        bandwidthEstimate = phy_throughput;
+        bandwidthEstimate_temp1 = phy_throughput;
+        firstOfBwEstimate = false;
+      }
+      else
+      {
+        if (secondOfBwEstimate)
+        {
+          bandwidthEstimate = phy_throughput;
+          bandwidthEstimate_temp1 = alpha * phy_throughput + (1 - alpha) * bandwidthEstimate_temp1;
+          bandwidthEstimate_temp2 = bandwidthEstimate_temp1;
+          secondOfBwEstimate = false;
+        }else{
+        //bandwidthEstimate = alpha * phy_throughput + (1 - alpha) * bandwidthEstimate;
+        bandwidthEstimate_temp1 = alpha * phy_throughput + (1 - alpha) * bandwidthEstimate_temp1;
+        bandwidthEstimate_temp2 = beta * bandwidthEstimate_temp1 + (1 - beta) * bandwidthEstimate_temp2;
+        bandwidthEstimate = 2 * bandwidthEstimate_temp1 - bandwidthEstimate_temp2 + beta / (1 - beta) * (bandwidthEstimate_temp1 - bandwidthEstimate_temp2);
+        //bandwidthEstimate = bandwidthEstimate_temp2;
+        }
+      }
+   } else{
+    //  *********** Holt ****************
+      //bandwidthEstimate = phy_throughput;
+      //temp1: exponential smooth
+      //temp2: delta, estimate trend
+      alpha=0.6;beta=0.2;
+      if(firstOfBwEstimate){
+        bandwidthEstimate = phy_throughput;
+        bandwidthEstimate_temp1 = phy_throughput;
+        bandwidthEstimate_temp2=0;
+        firstOfBwEstimate = false;
+      }
+      else
+      {
+        double last_temp1= bandwidthEstimate_temp1;
+        double last_temp2= bandwidthEstimate_temp2;
+        bandwidthEstimate_temp1 = alpha*phy_throughput+(1-alpha)*(bandwidthEstimate_temp1+last_temp2);
+        bandwidthEstimate_temp2= beta*(bandwidthEstimate_temp1 - last_temp1)+(1-beta)*last_temp2;//smooth trend
+        bandwidthEstimate = bandwidthEstimate_temp1 + bandwidthEstimate_temp2;
+      }
     }
-  }
-  //bandwidthEstimate = phy_throughput;
 }
 
 void
@@ -433,22 +462,25 @@ TcpStreamClient::RequestRepIndex ()
 
   if (m_algoName == "tobasco")
   {
+     int64_t EndTime = m_downloadRequestSent / 1000;
+    int64_t StartTime = lastEndTime; //lastDownloadEnd==CurrentPauseStart
+    Simulator::Schedule(MicroSeconds((double)1), &GetPhyRate, cm_crossLayerInfo, StartTime, EndTime,traceBegin);
+    lastEndTime = m_transmissionEndReceivingSegment / 1000;
     userinfoanswer = userinfoAlgo->UserinfoAlgo(m_segmentCounter, m_clientId ,0, 0);
     bandwidthanswer = bandwidthAlgo->BandwidthAlgo(m_segmentCounter, m_clientId  , 0, 0);
     bufferanswer = bufferAlgo->BufferAlgo (m_segmentCounter, m_clientId , 0, 10000000);
-    answer = algo->GetNextRep ( m_segmentCounter, m_clientId , bandwidthanswer.bandwidthEstimate, 0);
+    answer = algo->GetNextRep ( m_segmentCounter, m_clientId , bandwidthEstimate, 0);
     //answer = algo->GetNextRep(m_segmentCounter, m_clientId, bandwidthEstimate, 0);
+    if(m_segmentCounter==0) traceBegin=(int64_t)answer.decisionTime/1000;//ms
     answer = UptoQoE(answer);
-  }
-  else if(m_algoName == "tobasco2")
+  }else if(m_algoName == "tobasco2")
   {
     userinfoanswer = userinfoAlgo->UserinfoAlgo(m_segmentCounter, m_clientId ,0, 0);
     bandwidthanswer = bandwidthAlgo->BandwidthAlgo(m_segmentCounter, m_clientId , bandwidthEstimate, 0);
     bufferanswer = bufferAlgo->BufferAlgo (m_segmentCounter, m_clientId , 0, 10000000);
     answer = algo->GetNextRep ( m_segmentCounter, m_clientId , bandwidthEstimate, 0);
     answer = UptoQoE(answer);
-  }
-  else if (m_algoName == "tomato")
+  }else if (m_algoName == "tomato")
   {
     userinfoanswer = userinfoAlgo->UserinfoAlgo(m_segmentCounter, m_clientId, 0, 0); 
     bandwidthanswer = bandwidthAlgo->BandwidthAlgo(m_segmentCounter, m_clientId, 0, 0);
@@ -456,18 +488,16 @@ TcpStreamClient::RequestRepIndex ()
     //answer = algo->GetNextRep(m_segmentCounter, m_clientId, bandwidthanswer.bandwidthEstimate, 0);
     answer = algo->GetNextRep(m_segmentCounter, m_clientId, bandwidthEstimate, 0);
     answer = UptoQoE(answer);
-  }
-  else if (m_algoName == "festive")
+  } else if (m_algoName == "festive")
   {
     userinfoanswer = userinfoAlgo->UserinfoAlgo(m_segmentCounter, m_clientId, 0, 0);
     bandwidthanswer = bandwidthAlgo->BandwidthAlgo(m_segmentCounter, m_clientId, 0, 0);
     bufferanswer = bufferAlgo->BufferAlgo(m_segmentCounter, m_clientId, 0, 10000000);
     answer = algo->GetNextRep(m_segmentCounter, m_clientId, bandwidthanswer.bandwidthEstimate, 0);
     answer = UptoQoE(answer);
-  }
-  else if (m_algoName == "constbitrate") //constant bitrate
+  }else if (m_algoName == "constbitrate") //constant bitrate
   {
-    std::cout << "m_clientId  " << m_clientId << "  m_downloadRequest   " << m_downloadRequestSent / (double)1000000 << "   m_transmissionStart    " << m_transmissionStartReceivingSegment / (double)1000000 << "  m_transmissionEnd    " << m_transmissionEndReceivingSegment / (double)1000000 << "\n";
+    //std::cout << "m_clientId  " << m_clientId << "  m_downloadRequest   " << m_downloadRequestSent / (double)1000000 << "   m_transmissionStart    " << m_transmissionStartReceivingSegment / (double)1000000 << "  m_transmissionEnd    " << m_transmissionEndReceivingSegment / (double)1000000 << "\n";
     int64_t EndTime = m_downloadRequestSent / 1000;
     int64_t StartTime = lastEndTime; //lastDownloadEnd==CurrentPauseStart
     Simulator::Schedule(MicroSeconds((double)100), &GetPhyRate, cm_crossLayerInfo, StartTime, EndTime,traceBegin);
@@ -477,20 +507,15 @@ TcpStreamClient::RequestRepIndex ()
     bufferanswer = bufferAlgo->BufferAlgo(m_segmentCounter, m_clientId, 0, 10000000);
     int64_t constRepIndex =0;//setRepIndex
     answer = algo->GetNextRep(m_segmentCounter, m_clientId, bandwidthEstimate, constRepIndex); 
-    if(secondOfBwEstimate==true) traceBegin=(int64_t)answer.decisionTime/1000;//ms
-    std::cout << "At time " << answer.decisionTime / 1000000.0 << "clientId" << m_clientId << " choose  answer.nextRepIndex  " << answer.nextRepIndex << "    CrossLayerbandwidthEstimate  " << bandwidthEstimate / 1000000 << "Mbps"
-              << "\n";
-  }
-  else if (m_algoName == "constbitrate2") //constant bitrate_background
+    if(m_segmentCounter==0) traceBegin=(int64_t)answer.decisionTime/1000;//ms
+  }else if (m_algoName == "constbitrate2") //constant bitrate_background
   {
     userinfoanswer = userinfoAlgo->UserinfoAlgo(m_segmentCounter, m_clientId, 0, 0);
     bandwidthanswer = bandwidthAlgo->BandwidthAlgo(m_segmentCounter, m_clientId, 0, 0);
     bufferanswer = bufferAlgo->BufferAlgo(m_segmentCounter, m_clientId, 0, 10000000);
     int64_t constRepIndex = 0;//setRepIndex
     answer = algo->GetNextRep(m_segmentCounter, m_clientId, bandwidthanswer.bandwidthEstimate, constRepIndex); 
-  }
-  else
-  {
+  }else{
     NS_LOG_ERROR ("Invalid algorithm name entered. Terminating.");
     StopApplication ();
     Simulator::Stop ();
@@ -553,29 +578,16 @@ TcpStreamClient::ChoseInfoPath(int64_t infoindex)
 {
   NS_LOG_FUNCTION (this);
   switch (infoindex)
-  {/*
-      case 0:infoStatusTemp="4K_View_0.txt";break;
-      case 1: infoStatusTemp="4K_View_1.txt";break;
-      case 2: infoStatusTemp="4K_View_2.txt";break;
-      case 3: infoStatusTemp="4K_View_3.txt";break;
-      case 4: infoStatusTemp="4K_View_4.txt";break;
-      case 5: infoStatusTemp="4K_View_5.txt";break;
-      default: infoStatusTemp="4K_View_0.txt";break;*/
-  case 1:
-    infoStatusTemp = "SegmentSize_720s.txt";
-    break;
-  default:
-    infoStatusTemp = "SegmentSize_720s.txt";
-    break;
+  {  
+      default:     infoStatusTemp = "SegmentSize_360s.txt"; break;
    }
-
    return infoStatusTemp;
 }
 void
 TcpStreamClient::GetInfo()
 {
   //std::ifstream myinfo("UserInfo.txt");
-  std::ifstream myinfo("UserInfo_720s.txt");
+  std::ifstream myinfo("UserInfo_360s.txt");
   for (int64_t s; myinfo >> s;)
     m_videoData.userInfo.push_back(s);
 }

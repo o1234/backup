@@ -259,11 +259,15 @@ PhyRxStatsCalculator:: GetCorrectTbs(void)
     }
  }
   std::deque<PhyRxStatsCalculator::Time_Tbs> result_temp=result;
- if (scale>5)
+ /*
+ if (scale>5)//during 500ms exist upon 5 data
     result_temp.resize(scale);
-  else if (result_temp.size()>50)
-      result_temp.resize(50);
+  else if (result_temp.size()>50)//else extend to size 50
+    result_temp.resize(50);
   //NS_LOG_INFO("TBsizescale(num)=====" << result_temp.size() << "  diff===" << ((double)Simulator::Now().GetMilliSeconds() - (double)result_temp.at(0).timestamp));
+*/
+if (result_temp.size()>500)//else extend to size 50
+    result_temp.resize(500);
 
   double mean =0;
   double var =0;      
@@ -282,17 +286,13 @@ PhyRxStatsCalculator:: GetCorrectTbs(void)
   result_temp.at((result_temp.size() - 1)).gama = gama;
   result_temp.at((result_temp.size() - 1)).timescale =(double) (result_temp.at(0).timestamp - result_temp.at(result_temp.size() - 1).timestamp);
   if (gama > 0.3) 
-        windowSize = 50; //windowsize/2;
+        windowSize = 500; //windowsize/2;
   else 
-        windowSize=500;//windowsize;
-  /*NS_LOG_INFO("ExpectTImescale(ms)=====" << windowSize << 
-                                "===ActualTimescale" << result_temp.at((result_temp.size() - 1)).timescale << 
-                                "===Got Time=" << (double)Simulator::Now().GetMilliSeconds() <<
-                                "===Time Begin=" << result_temp.at(0).timestamp << 
-                                "===Time End=" << result_temp.at(result_temp.size() - 1).timestamp << 
-                                "===First Mcs" << result_temp.at(0).mcs << 
-                                "===Last Mcs" << result_temp.at(result_temp.size() - 1).mcs<< "===");
-                                */
+        windowSize=500;//windowsize==500ms;
+  /*NS_LOG_INFO("===ExpectTImescale(ms)  " << windowSize/ (double)1000<< "===ActualTimescale   " << result_temp.at((result_temp.size() - 1)).timescale / (double)1000);
+  NS_LOG_INFO("===Got Time=" << (double)Simulator::Now().GetMilliSeconds() /(double)1000 <<
+                                "===Time Begin=" << result_temp.at(0).timestamp/(double)1000 << 
+                                "===Time End=" << result_temp.at(result_temp.size() - 1).timestamp/(double)1000 );*/
   return result_temp;
 };	
 } // namespace ns3
