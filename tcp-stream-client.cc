@@ -359,7 +359,7 @@ updateScale(int64_t scale, std::vector<std::pair<int64_t,int64_t>> pause, std::v
 
 static void 
 GetPhyRate(Ptr<PhyRxStatsCalculator> phy_rx_stats, int64_t StartTime, int64_t EndTime,int64_t traceBegin)
-{/*
+{
   uint32_t cum_tbs = 0;
   std::deque<double> phy_throughput;
   phy_stats = phy_rx_stats->GetCorrectTbs();
@@ -414,81 +414,7 @@ GetPhyRate(Ptr<PhyRxStatsCalculator> phy_rx_stats, int64_t StartTime, int64_t En
         phy_throughput.push_back ( static_cast<double>(cum_tbs) * 8000 / (updateTimescale)); //bps  
         cum_tbs=0;
     }
-  }*/
-    uint32_t cum_tbs = 0;
-    std::deque<double> phy_throughput;
-    phy_stats = phy_rx_stats->GetCorrectTbs();
-    double updateTimescale = 0.0;
-    std::vector<std::pair<int64_t,int64_t>> new_stats;
-    std::pair<int64_t,int64_t> pausetemp;
-    pausetemp.first=StartTime;
-    pausetemp.second=EndTime;
-    if(pausetemp.first>0&&pausetemp.second>0) pause.push_back(pausetemp);
-    //**********every 1ms
-    uint32_t RequestTime = phy_stats.at(0).timestamp ;
-    if (RequestTime>500){ RequestTime =RequestTime - 500;}
-    int32_t k=0;
-    while (RequestTime>0  &&(k<10)){
-      uint32_t L=0;
-      for (uint64_t i=0; i<phy_stats.size();i++){
-      if(phy_stats.at(i).timestamp<RequestTime){
-          L=(phy_stats.at(i).timestamp-RequestTime)<(phy_stats.at(i-1).timestamp-RequestTime)?i:(i-1);
-          break;}
-      }
-      std::deque<std::pair<int64_t,int64_t>> new_stats_right;
-      std::deque<std::pair<int64_t,int64_t>> new_stats_left;
-      for (uint64_t i=L;i<phy_stats.size();i++){
-      int64_t right=1;
-      if((phy_stats.at(i).timestamp<(RequestTime)) && (right<100))
-      {
-          std::pair<int64_t,int64_t> temp;
-          temp.first=(int64_t)(phy_stats.at(i).timestamp);
-          temp.second=(int64_t)phy_stats.at(i).tbsize;
-          if (temp.first >= traceBegin && traceBegin > 0) {
-            new_stats_right.push_back(temp);
-            right++;}
-      }
-      }
-      for (uint64_t i=L;i>0;i--){
-      int64_t left=1;
-      if((phy_stats.at(i).timestamp>(RequestTime)) && (left<100))
-      {
-          std::pair<int64_t,int64_t> temp;
-          temp.first=(int64_t)(phy_stats.at(i).timestamp);
-          temp.second=(int64_t)phy_stats.at(i).tbsize;
-          if (temp.first >= traceBegin && traceBegin > 0) {
-            new_stats_left.push_front(temp);
-            left++;}
-      }
-      }
-      std::deque<std::pair<int64_t,int64_t>>::iterator it;
-      for(it=new_stats_left.begin();it!=new_stats_left.end();it++) new_stats.push_back(*it);
-      for(it=new_stats_right.begin();it!=new_stats_right.end();it++) new_stats.push_back(*it);//get every new_stats
-      new_stats_left.clear();
-      new_stats_right.clear();
-      if(new_stats.size()>30)
-      {
-          for (uint64_t i = 0; i < new_stats.size(); i++)
-          {
-            cum_tbs += new_stats.at(i).second;
-          }
-            int64_t scale = new_stats.at(0).first - new_stats.at(new_stats.size()-1).first;
-            updateTimescale= updateScale(scale,  pause,  new_stats);
-            new_stats.clear();       
-            phy_throughput.push_back ( static_cast<double>(cum_tbs) * 8000 / (updateTimescale)); //bps  
-            cum_tbs=0;
-      }
-      if (RequestTime>500)
-      {
-            RequestTime=RequestTime-500;k++;
-      } 
-      else
-      {
-          break;
-      }
-    }
-
-
+  }
   //NS_LOG_INFO("===cum_tbs " << cum_tbs << "====Pause startTime " << (double)StartTime/1000 <<"====Pause endTime " << (double)EndTime/1000 << " =====updateTimescale " << (double)updateTimescale/1000 << "   =====InstantBW   " << phy_throughput / 1000000 << "Mbps");
   if(phy_throughput.empty()) bandwidthEstimate=0;
   if((phy_throughput.size()<3)&& (phy_throughput.size()>0)) {
