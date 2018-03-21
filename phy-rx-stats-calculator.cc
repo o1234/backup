@@ -266,8 +266,8 @@ PhyRxStatsCalculator:: GetCorrectTbs(void)
     result_temp.resize(50);
   //NS_LOG_INFO("TBsizescale(num)=====" << result_temp.size() << "  diff===" << ((double)Simulator::Now().GetMilliSeconds() - (double)result_temp.at(0).timestamp));
 */
-if (result_temp.size()>500)//else extend to size 50
-    result_temp.resize(500);
+if (result_temp.size()>5000)//else extend to size 50
+    result_temp.resize(5000);
 
   double mean =0;
   double var =0;      

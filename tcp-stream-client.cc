@@ -53,8 +53,8 @@ std::vector<std::pair<int64_t,int64_t>> pause;//<Pause BeginTime,Pause End Time>
 bool firstOfBwEstimate = true;
 bool secondOfBwEstimate = true;
 double bandwidthEstimate = 0.0;
-double bandwidthEstimate_temp1 = 0.0;
-double bandwidthEstimate_temp2 = 0.0;
+//double bandwidthEstimate_temp1 = 0.0;
+//double bandwidthEstimate_temp2 = 0.0;
 double alpha = 0.1;
 double beta = 0.0;
 int64_t traceBegin=0.0;
@@ -353,17 +353,15 @@ updateScale(int64_t scale, std::vector<std::pair<int64_t,int64_t>> pause, std::v
     {
       updateTimescale = updateTimescale - (EndTime - new_stats.at(new_stats.size() - 1).first);
     }
-  }
+   }
   return updateTimescale;
 }
 
 static void 
 GetPhyRate(Ptr<PhyRxStatsCalculator> phy_rx_stats, int64_t StartTime, int64_t EndTime,int64_t traceBegin)
 {
-  //std::cout<<"********  interTime  ***** "<<interTime<<"\n";
   uint32_t cum_tbs = 0;
-  //std::vector<double>  TH_vec ;
-  double phy_throughput=0;
+  std::deque<double> phy_throughput;
   phy_stats = phy_rx_stats->GetCorrectTbs();
   double updateTimescale = 0.0;
   std::vector<std::pair<int64_t,int64_t>> new_stats;
@@ -371,39 +369,93 @@ GetPhyRate(Ptr<PhyRxStatsCalculator> phy_rx_stats, int64_t StartTime, int64_t En
   std::pair<int64_t,int64_t> pausetemp;
   pausetemp.first=StartTime;
   pausetemp.second=EndTime;
-  pause.push_back(pausetemp);
-
-  for (uint64_t i = 0; i < phy_stats.size(); i++)
-  {
-    std::pair<int64_t,int64_t> temp;
-    temp.first=(int64_t)(phy_stats.at(i).timestamp);
-    temp.second=(int64_t)phy_stats.at(i).tbsize;
-    if(temp.first>traceBegin&&traceBegin>0)
-      new_stats.push_back(temp);
-  }
+  if(pausetemp.first>0&&pausetemp.second>0) pause.push_back(pausetemp);
+  uint64_t loopTime= (phy_stats.size()/500);//the times of total size for every size500
+  for(uint64_t k=0;k<loopTime;k++){
+    for (uint64_t i = k*500; i < (k+1)*500; i++)
+    {
+      std::pair<int64_t,int64_t> temp;
+      temp.first=(int64_t)(phy_stats.at(i).timestamp);
+      temp.second=(int64_t)phy_stats.at(i).tbsize;
+      if(temp.first>traceBegin&&traceBegin>0)
+        new_stats.push_back(temp);
+    }
   if(new_stats.size()>0){
       for (uint64_t i = 0; i < new_stats.size(); i++)
      {
         cum_tbs += new_stats.at(i).second;
       }
-       int64_t scale = new_stats.at(0).first - new_stats.at(new_stats.size()-1).first;
-       updateTimescale= updateScale(scale,  pause,  new_stats);
-       phy_throughput= ( static_cast<double>(cum_tbs) * 8000 / (updateTimescale)); //bps   
-    }else{
-       phy_throughput=10*1e6;
+        int64_t scale = new_stats.at(0).first - new_stats.at(new_stats.size()-1).first;
+        updateTimescale= updateScale(scale,  pause,  new_stats);
+        new_stats.clear();       
+        phy_throughput.push_back ( static_cast<double>(cum_tbs) * 8000 / (updateTimescale)); //bps  
+        cum_tbs=0;
     }
-  //NS_LOG_INFO("===cum_tbs " << cum_tbs << "====Pause startTime " << (double)StartTime/1000 <<"====Pause endTime " << (double)EndTime/1000 << " =====updateTimescale " << (double)updateTimescale/1000 << "   =====InstantBW   " << phy_throughput / 1000000 << "Mbps");
-  if (phy_stats.at(phy_stats.size() - 1).gama > 0.3)
-  {
-    alpha = 0.2;
-    beta = 0.8;
-  }else{
-    alpha = 0.2;
-    beta = 0.8;
   }
-  bool smooth=false;//true: old smooth /  false: holt smooth
+  //the remain <500size TBSize Log
+  if((phy_stats.size()-(phy_stats.size()/500)*500)>0)
+  {
+        for (uint64_t i = (phy_stats.size()/500)*500; i < phy_stats.size(); i++)
+        {
+          std::pair<int64_t,int64_t> temp;
+          temp.first=(int64_t)(phy_stats.at(i).timestamp);
+          temp.second=(int64_t)phy_stats.at(i).tbsize;
+          if(temp.first>traceBegin&&traceBegin>0)
+            new_stats.push_back(temp);
+        }
+       if(new_stats.size()>0){
+         for (uint64_t i = 0; i < new_stats.size(); i++)
+        {
+        cum_tbs += new_stats.at(i).second;
+         }
+        int64_t scale = new_stats.at(0).first - new_stats.at(new_stats.size()-1).first;
+        updateTimescale= updateScale(scale,  pause,  new_stats);
+        new_stats.clear();       
+        phy_throughput.push_back ( static_cast<double>(cum_tbs) * 8000 / (updateTimescale)); //bps  
+        cum_tbs=0;
+    }
+  }
+  //NS_LOG_INFO("===cum_tbs " << cum_tbs << "====Pause startTime " << (double)StartTime/1000 <<"====Pause endTime " << (double)EndTime/1000 << " =====updateTimescale " << (double)updateTimescale/1000 << "   =====InstantBW   " << phy_throughput / 1000000 << "Mbps");
+  if(phy_throughput.empty()) bandwidthEstimate=0;
+  if((phy_throughput.size()<3)&& (phy_throughput.size()>0)) {
+    double aveBandwidth=0;
+    for(std::deque<double>::iterator it=phy_throughput.begin();it!=phy_throughput.end();it++){
+      aveBandwidth += *it;
+    }
+    bandwidthEstimate = (double) aveBandwidth/phy_throughput.size();
+  }else{
+    double temp,smooth_throughput,temp_ss;
+    for(std::deque<double>::reverse_iterator it=phy_throughput.rbegin();it!=phy_throughput.rend();it++){
+      if(it==phy_throughput.rbegin())
+     {
+         bandwidthEstimate=*it;
+         temp=*it;
+      }
+      else if(it==(phy_throughput.rbegin()+1))
+      {
+        bandwidthEstimate=alpha*(*it)+(1-alpha)*temp;
+        temp=bandwidthEstimate;
+      }
+      else if(it==(phy_throughput.rbegin()+2))
+      {
+        smooth_throughput=alpha*(*it)+(1-alpha)*temp;
+        temp_ss=smooth_throughput-temp;
+        temp=smooth_throughput;
+        bandwidthEstimate=smooth_throughput;
+      }else
+      {
+        smooth_throughput=alpha*(*it)+(1-alpha)*temp;
+        temp_ss=beta*(smooth_throughput-temp)+(1-beta)*temp_ss;
+        temp=smooth_throughput;
+        bandwidthEstimate=smooth_throughput+temp_ss;
+      }
+    }
+    }
+    phy_throughput.clear();
+/*
+  bool smooth=true;//true: old smooth /  false: holt smooth
   if(smooth){
-    //************ do not understand*************
+    //   ************ do not understand*************
     alpha=0.2;beta=0.8;
     if (firstOfBwEstimate)
       {
@@ -424,7 +476,7 @@ GetPhyRate(Ptr<PhyRxStatsCalculator> phy_rx_stats, int64_t StartTime, int64_t En
         bandwidthEstimate_temp1 = alpha * phy_throughput + (1 - alpha) * bandwidthEstimate_temp1;
         bandwidthEstimate_temp2 = beta * bandwidthEstimate_temp1 + (1 - beta) * bandwidthEstimate_temp2;
         bandwidthEstimate = 2 * bandwidthEstimate_temp1 - bandwidthEstimate_temp2 + beta / (1 - beta) * (bandwidthEstimate_temp1 - bandwidthEstimate_temp2);
-        //bandwidthEstimate = bandwidthEstimate_temp2;
+        bandwidthEstimate = bandwidthEstimate_temp1;
         }
       }
    } else{
@@ -447,7 +499,7 @@ GetPhyRate(Ptr<PhyRxStatsCalculator> phy_rx_stats, int64_t StartTime, int64_t En
         bandwidthEstimate_temp2= beta*(bandwidthEstimate_temp1 - last_temp1)+(1-beta)*last_temp2;//smooth trend
         bandwidthEstimate = bandwidthEstimate_temp1 + bandwidthEstimate_temp2;
       }
-    }
+    }*/
 }
 
 void
