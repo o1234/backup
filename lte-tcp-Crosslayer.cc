@@ -70,20 +70,21 @@ main (int argc, char *argv[])
         LogComponentEnable ("TcpStreamExample", LOG_LEVEL_INFO);
         LogComponentEnable ("TcpStreamClientApplication", LOG_LEVEL_INFO);
         LogComponentEnable ("TcpStreamServerApplication", LOG_LEVEL_INFO);
+        //LogComponentEnable("PfFfMacScheduler",LOG_LEVEL_INFO);
 
-        uint64_t segmentDuration = 2000000;//ms==> 2s/segment
+        uint64_t segmentDuration = 1000000;//ms==> 1s/segment
         // The simulation id is used to distinguish log file results from potentially multiple consequent simulation runs.
         uint32_t simulationId = 3;
         uint32_t numberOfClients = 1;
-        uint32_t numberOfEnbs = 7;
+        uint32_t numberOfEnbs = 2;//7
         std::string adaptationAlgo = "constbitrate"; //"tobasco2";
         std::string app_type = "Dash";                  //Bulk sender | On-Off Sender | Dash
-	double eNbTxPower = 43.0;                      //43
+	double eNbTxPower = 49.0;                      //43
 	int fading_model = 0;                                  // 0 for etu, 1 for eva
 	int load = 0;                                                    // 0 for low load, 1 for high load
 	int rlc_mode = 3;                                          // UM = 2; AM = 3
         int tx_mode = 2;
-	int bandwidth=50;	
+	int bandwidth=100;	
 	std::string data_rate="100Gbps";        //100Gbps
 
         CommandLine cmd;
@@ -119,15 +120,15 @@ main (int argc, char *argv[])
 		     "RLC mode[2 = UM | 3 = AM][default:3]",
 		     rlc_mode);
 	cmd.AddValue("tx_mode",
-		     "TX mode[0 = SISO | 1 = MIMO][default:1]",
+		     "TX mode[0 = SISO | 1 = MIMO_mode1 | 2=MIMO_mode2][default:0]",
 		     tx_mode);
 	cmd.AddValue("BandWidth",
 		     "Dl bandwidth and Ul bandwidth[default=100]",
 		     bandwidth);
 	cmd.AddValue("DataRate",
 		     "DataRate for PointToPoint(pgw->remoteHost)[Default=100Gbps]",
-		      data_rate);	
-
+		      data_rate);
+        cmd.Parse(argc, argv);
 
         Config::SetDefault("ns3::LteSpectrumPhy::CtrlErrorModelEnabled", BooleanValue(false));
 	Config::SetDefault("ns3::LteSpectrumPhy::DataErrorModelEnabled", BooleanValue(true));
@@ -150,8 +151,16 @@ main (int argc, char *argv[])
 	lteHelper->SetEpcHelper(epcHelper);
 	lteHelper->SetAttribute("FadingModel", StringValue("ns3::TraceFadingLossModel"));
         lteHelper->SetAttribute("PathlossModel", StringValue("ns3::Cost231PropagationLossModel"));
+        //lteHelper->SetAttribute("PathlossModel", StringValue("ns3::JakesPropagationLossModel"));
+        //lteHelper->SetAttribute("HandoverAlgorithm", StringValue("ns3::A3RsrpHandoverAlgorithm"));
         std::ifstream ifTraceFile;
 	std::string fading_trace_path;
+
+        if(simulationId==3){
+                fading_model=0;
+        }else if(simulationId==4|| simulationId==2){
+                fading_model=1;
+        }
 
 	if (fading_model == 0) {
 		fading_trace_path = "../../src/lte/model/fading-traces/fading_trace_ETU_3kmph.fad";
@@ -208,9 +217,11 @@ main (int argc, char *argv[])
         Ptr<ListPositionAllocator> positionAlloc_eNB = CreateObject<ListPositionAllocator>();
         
 
-        for (int64_t i = 0; i < eNb_nodes.GetN(); ++i)
-                positionAlloc_eNB->Add(Vector(i * 250.0, 0, 0));
-        
+        //for (int64_t i = 0; i < eNb_nodes.GetN(); ++i)
+        //       positionAlloc_eNB->Add(Vector(i * 200.0, 0, 0));
+        positionAlloc_eNB->Add(Vector(0, 0, 0));//eNB_0
+        positionAlloc_eNB->Add(Vector(180, 0, 0)); //eNB_1
+
         enbMobility.SetPositionAllocator(positionAlloc_eNB);
         enbMobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
         enbMobility.Install(eNb_nodes);
@@ -254,58 +265,56 @@ main (int argc, char *argv[])
                 ueMobility_1.SetMobilityModel("ns3::ConstantPositionMobilityModel");
                 ueMobility_1.Install(ue_nodes);//ue_nodes.Get(2)
         break;}
-        //etu 3kmph
+        //etu 3kmph random walk
         case 1:{
                 MobilityHelper ueMobility_2;
                 ueMobility_2.SetMobilityModel("ns3::RandomWalk2dMobilityModel",
-                                            "Mode", StringValue("Time"),
-                                            "Time", StringValue("2s"),
-                                            "Speed", StringValue("ns3::ConstantRandomVariable[Constant=0.83333]"),
-                                            "Bounds",RectangleValue(Rectangle(-200,200,-200,200)));
+                                              "Mode", StringValue("Time"),
+                                              "Time", StringValue("2s"),
+                                              "Speed", StringValue("ns3::ConstantRandomVariable[Constant=0.83333]"),
+                                              "Bounds", RectangleValue(Rectangle(-200, 200, -200, 200)));
                 ueMobility_2.Install(ue_nodes.Get(0));
         break;}
-        //etu 60kmph
+        //cross two eNB center
         case 2:{
                 MobilityHelper ueMobility_3;
-                ueMobility_3.SetMobilityModel("ns3::RandomWalk2dMobilityModel",
-                                            "Mode", StringValue("Time"),
-                                            "Time", StringValue("2s"),
-                                            "Speed", StringValue("ns3::ConstantRandomVariable[Constant=16.66667]"),
-                                            "Bounds",RectangleValue(Rectangle(-200,200,-200,200)));
-                ueMobility_3.Install(ue_nodes.Get(0));
+                ueMobility_3.SetMobilityModel("ns3::ConstantVelocityMobilityModel");
+                ueMobility_3.SetPositionAllocator("ns3::UniformDiscPositionAllocator",
+                                                "X", DoubleValue(90.0),
+                                                "Y", DoubleValue(-15.0),
+                                                "rho", DoubleValue(0));
+                ueMobility_3.Install(ue_nodes);
+                for (int64_t i = 0; i<ue_nodes.GetN();i++){
+                        Ptr<ConstantVelocityMobilityModel> cvmm = ue_nodes.Get(i)->GetObject<ConstantVelocityMobilityModel>();
+                        cvmm->SetVelocity(Vector(0,0.833, 0.0));
+                }        
         break;}
-        //eva 60kmph
+        //etu 3km BS(far-->near)
         case 3:{
                 MobilityHelper ueMobility_4;
                 ueMobility_4.SetMobilityModel("ns3::ConstantVelocityMobilityModel");
                 ueMobility_4.SetPositionAllocator("ns3::UniformDiscPositionAllocator",
-                                                "X", DoubleValue(-90.0),//-110
-                                                "Y", DoubleValue(-0.0),//-20
-                                                "rho", DoubleValue(0));
-                /*ueMobility_4.Install(ue_nodes.Get(0));
-                Ptr<ConstantVelocityMobilityModel> cvmm = ue_nodes.Get(0)->GetObject<ConstantVelocityMobilityModel>();
-                cvmm->SetVelocity(Vector(0.83333, 0.0, 0.0));*/
+                                                "X", DoubleValue(-90.0),//-90;
+                                                "Y", DoubleValue(-0.0),//-0
+                                                "rho", DoubleValue(0));//230
                 ueMobility_4.Install(ue_nodes);
                 for (int64_t i = 0; i<ue_nodes.GetN();i++){
                         Ptr<ConstantVelocityMobilityModel> cvmm = ue_nodes.Get(i)->GetObject<ConstantVelocityMobilityModel>();
                         cvmm->SetVelocity(Vector(0.83333, 0.0, 0.0));
-                }
-            
-                
-                break;
-        }
-        //eva 60kmph++
+                }        
+                break;}
+        //const acceleration
         case 4:{
                 MobilityHelper ueMobility_5;
-                ueMobility_5.SetMobilityModel("ns3::ConstantVelocityMobilityModel");
+                ueMobility_5.SetMobilityModel("ns3::ConstantAccelerationMobilityModel");
                 ueMobility_5.SetPositionAllocator("ns3::UniformDiscPositionAllocator",
-                                                "X", DoubleValue(-10.0),
+                                                "X", DoubleValue(-90.0),//-90
                                                 "Y", DoubleValue(0),
                                                 "rho", DoubleValue(0));
                 ueMobility_5.Install(ue_nodes.Get(0));
-                Ptr<ConstantVelocityMobilityModel> cvmm = ue_nodes.Get(0)->GetObject<ConstantVelocityMobilityModel>();
-                cvmm->SetVelocity(Vector(16.6666667, 0.0, 0.0));
-        break;}
+                Ptr<ConstantAccelerationMobilityModel> cvmm = ue_nodes.Get(0)->GetObject<ConstantAccelerationMobilityModel>();
+                cvmm->SetVelocityAndAcceleration(Vector(0,0,0),Vector(0.036, 0.0, 0.0));
+                break;}
         }
 
         NetDeviceContainer eNb_devs = lteHelper->InstallEnbDevice(eNb_nodes);
@@ -313,19 +322,22 @@ main (int argc, char *argv[])
         
 	internet.Install(ue_nodes);
 	ueIpIface = epcHelper->AssignUeIpv4Address(NetDeviceContainer(ue_devs));
-        if (simulationId==3)
+        if (simulationId == 3 || simulationId == 4)
         {
-                //lteHelper->Attach(ue_devs.Get(0), eNb_devs.Get(0));
-                lteHelper->AttachToClosestEnb(ue_devs, eNb_devs);
-        }else if(simulationId==4) 
+                lteHelper->Attach(ue_devs.Get(0), eNb_devs.Get(0));
+                lteHelper->AddX2Interface(eNb_nodes);
+                lteHelper->HandoverRequest(Seconds(100), ue_devs.Get(0), eNb_devs.Get(0), eNb_devs.Get(1));//if constvelocity 228
+                //lteHelper->AttachToClosestEnb(ue_devs, eNb_devs);
+        }else if(simulationId==5) 
         {
                 lteHelper->Attach(ue_devs.Get(0), eNb_devs.Get(0));                
                 lteHelper->AddX2Interface(eNb_nodes);
-                for (int64_t i = 1; i < eNb_nodes.GetN(); ++i)
-                {  
-                        lteHelper->HandoverRequest(Seconds(i *15 +0.6), ue_devs.Get(0),eNb_devs.Get(i-1),eNb_devs.Get(i));
-    
-                }
+                lteHelper->AttachToClosestEnb(ue_devs, eNb_devs);
+                //for (int64_t i = 1; i < eNb_nodes.GetN(); ++i)
+                //{  
+                //        lteHelper->HandoverRequest(Seconds((i -1)*12 +6.6), ue_devs.Get(0),eNb_devs.Get(i-1),eNb_devs.Get(i));
+                //}
+                //lteHelper->HandoverRequest(Seconds(10), ue_devs.Get(0), eNb_devs.Get(0), eNb_devs.Get(1));
         }else{
                 lteHelper->AttachToClosestEnb(ue_devs, eNb_devs);
         }
@@ -341,13 +353,15 @@ main (int argc, char *argv[])
 
         // Determin client nodes for object creation with client helper class 
         std::vector <std::pair <Ptr<Node>, std::string> > clients;
-        std::pair <Ptr<Node>, std::string> client (ue_nodes.Get(0), adaptationAlgo);//ue0 applying Dash,other ue applying udp
-        clients.push_back (client);
-       /* for (NodeContainer::Iterator i = ue_nodes.Begin ()+1; i != ue_nodes.End (); ++i)
+        //std::pair <Ptr<Node>, std::string> client1 (ue_nodes.Get(0), adaptationAlgo);//ue0 applying Dash
+       // clients.push_back(client1);
+        //std::pair<Ptr<Node>, std::string> client2(ue_nodes.Get(1), adaptationAlgo);  //ue0 applying Dash
+        //clients.push_back (client2);
+       for (NodeContainer::Iterator i = ue_nodes.Begin (); i != ue_nodes.End (); ++i)
         {
-                std::pair <Ptr<Node>, std::string> other_client (*i, "constbitrate2");//  *i
-                clients.push_back (other_client);
-         } */
+                std::pair<Ptr<Node>, std::string> client(*i, adaptationAlgo); //  *i
+                clients.push_back (client);
+         } 
         if (app_type.compare("Dash")==0 ){
         
         const Ptr<PhyRxStatsCalculator> lte_phy_rx_stats = lteHelper->GetPhyRxStats();
@@ -364,6 +378,9 @@ main (int argc, char *argv[])
         
         ApplicationContainer clientApps = clientHelper.Install (clients);
         clientApps.Get (0)->SetStartTime (Seconds (2.0));
+        //clientApps.Get(0)->SetStopTime(Seconds(15.0));
+        //clientApps.Get(1)->SetStartTime(Seconds(10.0));
+        //clientApps.Get(1)->SetStopTime(Seconds(25.0));
         /*for (uint i = 1; i < clientApps.GetN (); i++)
         {
               double startTime = 30.0 + ((i * 3) / 100.0) ;
@@ -375,7 +392,7 @@ main (int argc, char *argv[])
        
         NS_LOG_INFO ("Run Simulation.");
         NS_LOG_INFO ("Sim:   " << simulationId << "   Clients:   " << numberOfClients);
-        Simulator::Stop(Seconds(70));
+        Simulator::Stop(Seconds(40));//70
         Simulator::Run ();
         Simulator::Destroy ();
         NS_LOG_INFO ("Done.");
