@@ -63,7 +63,21 @@ std::string ToString(T val)
 
 using namespace ns3;
 NS_LOG_COMPONENT_DEFINE ("TcpStreamExample");
-
+//<d>
+static void UpdateBW(std::string &data_rate , int n){
+        data_rate = data_rate.substr(0,data_rate.length()-4);
+        char* end;
+        int newBW = static_cast<int>(strtol(data_rate.c_str(),&end,10));
+         // newBW = newBW + pow(-1,n/5)*5;
+        if(n>30){
+                newBW=10;
+        }
+        sprintf(end,"%d",newBW);
+        data_rate = end;
+        data_rate = data_rate +"Mbps";
+        Config::Set("NodeList/0/DeviceList/2/$ns3::PointToPointNetDevice/DataRate", StringValue(data_rate));
+}
+//</d>
 int 
 main (int argc, char *argv[])
 {
@@ -75,8 +89,8 @@ main (int argc, char *argv[])
         uint64_t segmentDuration = 1000000;//ms==> 1s/segment
         // The simulation id is used to distinguish log file results from potentially multiple consequent simulation runs.
         uint32_t simulationId = 3;
-        uint32_t numberOfClients = 1;
-        uint32_t numberOfEnbs = 2;//7
+        uint32_t numberOfClients = 10;
+        uint32_t numberOfEnbs =7;//7
         std::string adaptationAlgo = "constbitrate"; //"tobasco2";
         std::string app_type = "Dash";                  //Bulk sender | On-Off Sender | Dash
 	double eNbTxPower = 49.0;                      //43
@@ -85,7 +99,7 @@ main (int argc, char *argv[])
 	int rlc_mode = 3;                                          // UM = 2; AM = 3
         int tx_mode = 2;
 	int bandwidth=100;	
-	std::string data_rate="100Gbps";        //100Gbps
+	std::string data_rate="100Mbps";        //100Gbps
 
         CommandLine cmd;
         cmd.Usage ("Simulation of streaming with DASH.\n");
@@ -184,6 +198,7 @@ main (int argc, char *argv[])
         lteHelper->SetEnbDeviceAttribute("DlBandwidth", UintegerValue(bandwidth));
 	lteHelper->SetEnbDeviceAttribute("UlBandwidth", UintegerValue(bandwidth));
 	lteHelper->SetSchedulerType("ns3::PfFfMacScheduler");
+        lteHelper->SetHandoverAlgorithmType("ns3::A3RsrpHandoverAlgorithm");
 
         Ptr<Node>           pgw = epcHelper->GetPgwNode();
 	std::cout <<"pgw Id:  "<< pgw->GetId() << std::endl;
@@ -212,7 +227,7 @@ main (int argc, char *argv[])
         NodeContainer ue_nodes;
         Ipv4InterfaceContainer ueIpIface;
         ue_nodes.Create(numberOfClients);
-        eNb_nodes.Create(numberOfEnbs);
+       eNb_nodes.Create(numberOfEnbs);
         MobilityHelper enbMobility;
         Ptr<ListPositionAllocator> positionAlloc_eNB = CreateObject<ListPositionAllocator>();
         
@@ -220,12 +235,25 @@ main (int argc, char *argv[])
         //for (int64_t i = 0; i < eNb_nodes.GetN(); ++i)
         //       positionAlloc_eNB->Add(Vector(i * 200.0, 0, 0));
         positionAlloc_eNB->Add(Vector(0, 0, 0));//eNB_0
-        positionAlloc_eNB->Add(Vector(180, 0, 0)); //eNB_1
+        //positionAlloc_eNB->Add(Vector(180, 0, 0)); //eNB_1
+        positionAlloc_eNB->Add(Vector(433, 250, 0));
+        positionAlloc_eNB->Add(Vector(0, 500, 0));
+        positionAlloc_eNB->Add(Vector(-433, 250, 0));
+        positionAlloc_eNB->Add(Vector(-433, -250, 0));
+        positionAlloc_eNB->Add(Vector(0, -500, 0));
+        positionAlloc_eNB->Add(Vector(433, -250, 0));
 
         enbMobility.SetPositionAllocator(positionAlloc_eNB);
         enbMobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
         enbMobility.Install(eNb_nodes);
-        
+
+        //<d>
+        for(int i=0;i<static_cast<int>(60);i++){
+                Simulator::Schedule(Seconds(1*i),&UpdateBW,data_rate,i);//change BW every 5s
+        }
+        //</d>
+
+
         // create folder 
         std::string dir = "mylogs/";
         std::string subdir = dir+adaptationAlgo+"/";
@@ -254,7 +282,8 @@ main (int argc, char *argv[])
                         randPosAlloc->SetX(0);
                         randPosAlloc->SetY(0);
                         Vector pos = Vector (randPosAlloc->GetNext());
-                        positionAlloc->Add (pos);
+                        //positionAlloc->Add (pos);
+                        positionAlloc->Add (Vector(120,0,0));//******constmobility for test,30Mbps
 
                 // log client positions
                         clientPosLog << ToString(pos.x) << ", " << ToString(pos.y) << ", " << ToString(pos.z) << "\n";
@@ -271,9 +300,10 @@ main (int argc, char *argv[])
                 ueMobility_2.SetMobilityModel("ns3::RandomWalk2dMobilityModel",
                                               "Mode", StringValue("Time"),
                                               "Time", StringValue("2s"),
-                                              "Speed", StringValue("ns3::ConstantRandomVariable[Constant=0.83333]"),
-                                              "Bounds", RectangleValue(Rectangle(-200, 200, -200, 200)));
-                ueMobility_2.Install(ue_nodes.Get(0));
+                                              "Speed", StringValue("ns3::ConstantRandomVariable[Constant=16.6667]"),
+                                              //"Speed",StringValue("ns3::UniformRandomVariables[Min=0.833|Max=16.67]"),
+                                              "Bounds", RectangleValue(Rectangle(-500, 500, -500, 500)));
+                ueMobility_2.Install(ue_nodes);
         break;}
         //cross two eNB center
         case 2:{
@@ -313,11 +343,11 @@ main (int argc, char *argv[])
                                                 "rho", DoubleValue(0));
                 ueMobility_5.Install(ue_nodes.Get(0));
                 Ptr<ConstantAccelerationMobilityModel> cvmm = ue_nodes.Get(0)->GetObject<ConstantAccelerationMobilityModel>();
-                cvmm->SetVelocityAndAcceleration(Vector(0,0,0),Vector(0.036, 0.0, 0.0));
+                cvmm->SetVelocityAndAcceleration(Vector(0,0,0),Vector(0.036, 0.0, 0.0));//0.036
                 break;}
         }
 
-        NetDeviceContainer eNb_devs = lteHelper->InstallEnbDevice(eNb_nodes);
+        NetDeviceContainer eNb_devs = lteHelper->InstallEnbDevice(eNb_nodes);  //<!!!!>
         NetDeviceContainer ue_devs = lteHelper->InstallUeDevice(ue_nodes);
         
 	internet.Install(ue_nodes);
@@ -326,7 +356,7 @@ main (int argc, char *argv[])
         {
                 lteHelper->Attach(ue_devs.Get(0), eNb_devs.Get(0));
                 lteHelper->AddX2Interface(eNb_nodes);
-                lteHelper->HandoverRequest(Seconds(100), ue_devs.Get(0), eNb_devs.Get(0), eNb_devs.Get(1));//if constvelocity 228
+               lteHelper->HandoverRequest(Seconds(100), ue_devs.Get(0), eNb_devs.Get(0), eNb_devs.Get(1));//if constvelocity 228//100
                 //lteHelper->AttachToClosestEnb(ue_devs, eNb_devs);
         }else if(simulationId==5) 
         {
@@ -339,6 +369,10 @@ main (int argc, char *argv[])
                 //}
                 //lteHelper->HandoverRequest(Seconds(10), ue_devs.Get(0), eNb_devs.Get(0), eNb_devs.Get(1));
         }else{
+                for (uint32_t i = 0; i < ue_nodes.GetN(); i++) {
+                        lteHelper->Attach(ue_devs.Get(i), eNb_devs.Get(0));
+                }
+                lteHelper->AddX2Interface(eNb_nodes);
                 lteHelper->AttachToClosestEnb(ue_devs, eNb_devs);
         }
 	for (uint32_t i = 0; i < ue_nodes.GetN(); i++) 
@@ -378,7 +412,7 @@ main (int argc, char *argv[])
         
         ApplicationContainer clientApps = clientHelper.Install (clients);
         clientApps.Get (0)->SetStartTime (Seconds (2.0));
-        //clientApps.Get(0)->SetStopTime(Seconds(15.0));
+        clientApps.Get(0)->SetStopTime(Seconds(100.0));
         //clientApps.Get(1)->SetStartTime(Seconds(10.0));
         //clientApps.Get(1)->SetStopTime(Seconds(25.0));
         /*for (uint i = 1; i < clientApps.GetN (); i++)
@@ -392,7 +426,7 @@ main (int argc, char *argv[])
        
         NS_LOG_INFO ("Run Simulation.");
         NS_LOG_INFO ("Sim:   " << simulationId << "   Clients:   " << numberOfClients);
-        Simulator::Stop(Seconds(40));//70
+        Simulator::Stop(Seconds(100));//70
         Simulator::Run ();
         Simulator::Destroy ();
         NS_LOG_INFO ("Done.");
