@@ -28,15 +28,15 @@ TobascoAlgorithm::TobascoAlgorithm(const videoData &videoData,
                                    const playbackData &playbackData,
                                    const bufferData &bufferData,
                                    const throughputData &throughput) : AdaptationAlgorithm(videoData, playbackData, bufferData, throughput),
-                                                                       m_a1(0.85),
-                                                                       m_a2(0.55),
-                                                                       m_a3(0.70),
-                                                                       m_a4(0.85),
-                                                                       m_a5(1.00),
-                                                                       m_bMin(m_videoData.segmentDuration * 3),     //3
-                                                                       m_bLow(m_videoData.segmentDuration * 7),     //7
-                                                                       m_bHigh(m_videoData.segmentDuration * 13),   //13
-                                                                       m_bOpt((int64_t)(0.5 * (m_bLow + m_bHigh))), //10
+                                                                       m_a1(0.75),
+                                                                       m_a2(0.35),
+                                                                       m_a3(0.55),
+                                                                       m_a4(0.75),
+                                                                       m_a5(0.90),
+                                                                       m_bMin(m_videoData.segmentDuration * 2),
+                                                                       m_bLow(m_videoData.segmentDuration * 3),
+                                                                       m_bHigh(m_videoData.segmentDuration * 7),
+                                                                       m_bOpt(m_videoData.segmentDuration * 5),
                                                                        m_lastRepIndex(0),
                                                                        m_lastBufferStatus(0),
                                                                        m_runningFastStart(true),
@@ -60,17 +60,20 @@ TobascoAlgorithm::GetNextRep(const int64_t segmentCounter,
   const int64_t timeNow = Simulator::Now().GetMicroSeconds();
   answer.decisionTime = timeNow;
   int64_t bufferNow = 0;
-  if (segmentCounter != 0)
+  if (segmentCounter > 0)
   {
     nextRepIndex = m_lastRepIndex;
     bufferNow = m_bufferData.bufferLevelNew.back() - (timeNow - m_throughput.transmissionEnd.back());
     double nextHighestRepBitrate;
+
     if (m_lastRepIndex < m_highestRepIndex)
       nextHighestRepBitrate = (m_videoData.averageBitrate.at(m_videoData.userInfo.at(segmentCounter)).at(m_lastRepIndex + 1));
     else
       nextHighestRepBitrate = (m_videoData.averageBitrate.at(m_videoData.userInfo.at(segmentCounter)).at(m_lastRepIndex));
 
-    if (m_runningFastStart && m_lastRepIndex != m_highestRepIndex && bufferNow >= m_lastBufferStatus && ((m_videoData.averageBitrate.at(m_videoData.userInfo.at(segmentCounter)).at(m_lastRepIndex)) <= m_a1 * extraParameter))
+    bool qualified = extraParameter > 0 ? ((m_videoData.averageBitrate.at(m_videoData.userInfo.at(segmentCounter)).at(m_lastRepIndex)) <= m_a1 * extraParameter) : true;
+
+    if (m_runningFastStart && m_lastRepIndex != m_highestRepIndex && bufferNow >= m_lastBufferStatus && qualified)
     {
       if (bufferNow < m_bMin)
       {
@@ -90,7 +93,7 @@ TobascoAlgorithm::GetNextRep(const int64_t segmentCounter,
       }
       else
       {
-        if (nextHighestRepBitrate <= (m_a4 * extraParameter))
+        if (nextHighestRepBitrate < (m_a4 * extraParameter))
         {
           decisionCase = 3;
           nextRepIndex = m_lastRepIndex + 1;
@@ -107,18 +110,18 @@ TobascoAlgorithm::GetNextRep(const int64_t segmentCounter,
       m_runningFastStart = false;
       if (bufferNow < m_bMin)
       {
-        decisionCase = 0;
+        decisionCase = 11;
         nextRepIndex = 0;
       }
       else if (bufferNow < m_bLow)
       {
+        double diff = extraParameter2 != 0 ? m_a4 : 1.0;
         double lastSegmentThroughput = (m_videoData.segmentSize.at(m_videoData.userInfo.at(segmentCounter - 1)).at(m_lastRepIndex).at(segmentCounter - 1)) / ((double)(m_throughput.transmissionEnd.at(segmentCounter - 1) - m_throughput.transmissionStart.at(segmentCounter - 1)) / 1000000.0);
-        if ((m_lastRepIndex != 0) && (m_videoData.averageBitrate.at(m_videoData.userInfo.at(segmentCounter)).at(m_lastRepIndex) >= lastSegmentThroughput))
+        if ((m_lastRepIndex != 0) && (m_videoData.averageBitrate.at(m_videoData.userInfo.at(segmentCounter)).at(m_lastRepIndex) >= diff * lastSegmentThroughput))
         {
-          decisionCase = 5;
           for (int i = m_highestRepIndex; i >= 0; i--)
           {
-            if (m_videoData.averageBitrate.at(m_videoData.userInfo.at(segmentCounter)).at(m_lastRepIndex) >= lastSegmentThroughput)
+            if (m_videoData.averageBitrate.at(m_videoData.userInfo.at(segmentCounter)).at(m_lastRepIndex) >= diff * lastSegmentThroughput)
             {
               continue;
             }
@@ -131,6 +134,12 @@ TobascoAlgorithm::GetNextRep(const int64_t segmentCounter,
           if (nextRepIndex >= m_lastRepIndex)
           {
             nextRepIndex = m_lastRepIndex - 1;
+            decisionCase = 5;
+          }
+          else
+          {
+            nextRepIndex = m_lastRepIndex;
+            decisionCase = 6;
           }
         }
       }
@@ -140,6 +149,12 @@ TobascoAlgorithm::GetNextRep(const int64_t segmentCounter,
         {
           delayDecision = 2;
           bDelay = (int64_t)(std::max(bufferNow - m_videoData.segmentDuration, m_bOpt));
+          decisionCase = 7;
+        }
+        else
+        {
+          nextRepIndex = m_lastRepIndex;
+          decisionCase = 8;
         }
       }
       else
@@ -148,10 +163,11 @@ TobascoAlgorithm::GetNextRep(const int64_t segmentCounter,
         {
           delayDecision = 3;
           bDelay = (int64_t)(std::max(bufferNow - m_videoData.segmentDuration, m_bOpt));
+          decisionCase = 9;
         }
         else
         {
-          decisionCase = 6;
+          decisionCase = 10;
           nextRepIndex = m_lastRepIndex + 1;
         }
       }
@@ -159,11 +175,11 @@ TobascoAlgorithm::GetNextRep(const int64_t segmentCounter,
   }
   else
   {
-    decisionCase = 8;
+    decisionCase = 0;
     nextRepIndex = m_lastRepIndex;
   }
 
-  if (segmentCounter != 0 && delayDecision != 0)
+  if (segmentCounter >= 0 && delayDecision != 0)
   {
     if (bDelay > bufferNow)
     {
@@ -174,7 +190,7 @@ TobascoAlgorithm::GetNextRep(const int64_t segmentCounter,
       bDelay = (uint64_t)(bufferNow - bDelay);
     }
   }
-
+  m_lastBufferStatus = bufferNow;
   m_lastRepIndex = nextRepIndex;
   answer.nextRepIndex = nextRepIndex;
   answer.nextDownloadDelay = bDelay;

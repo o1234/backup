@@ -48,6 +48,11 @@
 
 namespace ns3
 {
+<<<<<<< HEAD
+=======
+
+std::deque<PhyRxStatsCalculator::Time_Tbs> phy_stats;
+>>>>>>> f11b43c1c173b88e6911b86e2046eeadd2590f27
 std::vector<std::pair<int64_t, int64_t>> pause; //<Pause BeginTime,Pause End Time>
 bool firstOfBwEstimate = true;
 bool secondOfBwEstimate = true;
@@ -281,6 +286,7 @@ void TcpStreamClient::Initialise(std::string algorithm, uint16_t clientId, const
     bufferAlgo = new BufferCleanAlgorithm(m_videoData, m_playbackData, m_bufferData, m_throughput);
     algo = new constbitrate2Algorithm(m_videoData, m_playbackData, m_bufferData, m_throughput);
   }
+<<<<<<< HEAD
   else if (algorithm == "qoe")
   {
     userinfoAlgo = new UserPredictionAlgorithm(m_videoData, m_playbackData, m_bufferData, m_throughput);
@@ -288,6 +294,8 @@ void TcpStreamClient::Initialise(std::string algorithm, uint16_t clientId, const
     bufferAlgo = new BufferCleanAlgorithm(m_videoData, m_playbackData, m_bufferData, m_throughput);
     algo = new qoeAlgorithm(m_videoData, m_playbackData, m_bufferData, m_throughput);
   }
+=======
+>>>>>>> f11b43c1c173b88e6911b86e2046eeadd2590f27
   else
   {
     NS_LOG_ERROR("Invalid algorithm name entered. Terminating.");
@@ -351,11 +359,18 @@ updateScale(int64_t scale, std::vector<std::pair<int64_t, int64_t>> pause, std::
   int64_t updateTimescale = scale;
   if (pause.empty() || new_stats.empty())
     return updateTimescale;
+<<<<<<< HEAD
   //std::cout<<"Log Start At "<<new_stats.at(new_stats.size() - 1).first<<"Log End At "<<new_stats.at(0).first<<"\n";
   for (uint64_t i = 0; i < pause.size(); i++)
   {
     int64_t StartTime = pause.at(i).first;//early
     int64_t EndTime = pause.at(i).second;//late
+=======
+  for (uint64_t i = 0; i < pause.size(); i++)
+  {
+    int64_t StartTime = pause.at(i).first;
+    int64_t EndTime = pause.at(i).second;
+>>>>>>> f11b43c1c173b88e6911b86e2046eeadd2590f27
     if (0 < new_stats.at(new_stats.size() - 1).first && new_stats.at(new_stats.size() - 1).first < StartTime && new_stats.at(0).first > EndTime)
     {
       //std::cout<<"-----L--P "<<StartTime<<" ****P "<<EndTime<<" --L----"<<"\n";
@@ -371,6 +386,7 @@ updateScale(int64_t scale, std::vector<std::pair<int64_t, int64_t>> pause, std::
   }
   return updateTimescale;
 }
+<<<<<<< HEAD
 double calMACD(std::deque<double> phy_throughput)
 { //9,12,24
   if (phy_throughput.size() < 42)
@@ -402,6 +418,12 @@ double BWEstimate(std::deque<PhyRxStatsCalculator::Time_Tbs> phy_stats,std::vect
   double bandwidthEstimate_inter=0.0;
   if(phy_stats.empty()) return bandwidthEstimate_inter;
   std::vector<std::pair<int64_t, int64_t>> new_stats;
+=======
+
+static void
+GetPhyRate(Ptr<PhyRxStatsCalculator> phy_rx_stats, int64_t StartTime, int64_t EndTime, int64_t traceBegin)
+{ /*
+>>>>>>> f11b43c1c173b88e6911b86e2046eeadd2590f27
   uint32_t cum_tbs = 0;
   std::deque<double> phy_throughput;
   double updateTimescale = 0.0;
@@ -440,6 +462,7 @@ double BWEstimate(std::deque<PhyRxStatsCalculator::Time_Tbs> phy_stats,std::vect
           new_stats_right.push_back(temp);
           right++;
         }
+<<<<<<< HEAD
       }
     }
     if (new_stats_right.empty())//if deta time is not enought, then deta num
@@ -458,6 +481,132 @@ double BWEstimate(std::deque<PhyRxStatsCalculator::Time_Tbs> phy_stats,std::vect
             right++;
           }
         }
+=======
+       if(new_stats.size()>0){
+         for (uint64_t i = 0; i < new_stats.size(); i++)
+        {
+        cum_tbs += new_stats.at(i).second;
+         }
+        int64_t scale = new_stats.at(0).first - new_stats.at(new_stats.size()-1).first;
+        updateTimescale= updateScale(scale,  pause,  new_stats);
+        new_stats.clear();       
+        phy_throughput.push_back ( static_cast<double>(cum_tbs) * 8000 / (updateTimescale)); //bps  
+        cum_tbs=0;
+    }
+  }*/
+  uint32_t cum_tbs = 0;
+  std::deque<double> phy_throughput;
+  phy_stats = phy_rx_stats->GetCorrectTbs();
+  double updateTimescale = 0.0;
+  std::vector<std::pair<int64_t, int64_t>> new_stats;
+  std::pair<int64_t, int64_t> pausetemp;
+  pausetemp.first = StartTime;
+  pausetemp.second = EndTime;
+  if (pausetemp.first > 0 && pausetemp.second > 0)
+    pause.push_back(pausetemp);
+  //**********every 1ms
+  uint32_t RequestTime = phy_stats.at(0).timestamp;
+  if (RequestTime > 250)
+  {
+    RequestTime = RequestTime - 250;
+  } //500ms
+  int32_t k = 0;
+  while (RequestTime > 0 && (k < 20))
+  {
+    //std::cout<<(double)RequestTime/1000<<"\t";
+    uint32_t L = 0;
+    for (uint64_t i = 0; i < phy_stats.size(); i++)
+    {
+      if (phy_stats.at(i).timestamp < RequestTime)
+      {
+        L = (phy_stats.at(i).timestamp - RequestTime) < (phy_stats.at(i - 1).timestamp - RequestTime) ? i : (i - 1);
+        break;
+      }
+    }
+    std::deque<std::pair<int64_t, int64_t>> new_stats_right;
+    std::deque<std::pair<int64_t, int64_t>> new_stats_left;
+    for (uint64_t i = L; i < phy_stats.size(); i++)
+    {
+      int64_t right = 1;
+      if ((phy_stats.at(i).timestamp < (RequestTime)) && (right < 100))
+      {
+        std::pair<int64_t, int64_t> temp;
+        temp.first = (int64_t)(phy_stats.at(i).timestamp);
+        temp.second = (int64_t)phy_stats.at(i).tbsize;
+        if (temp.first >= traceBegin && traceBegin > 0)
+        {
+          new_stats_right.push_back(temp);
+          right++;
+        }
+      }
+    }
+    for (uint64_t i = L; i > 0; i--)
+    {
+      int64_t left = 1;
+      if ((phy_stats.at(i).timestamp > (RequestTime)) && (left < 100))
+      {
+        std::pair<int64_t, int64_t> temp;
+        temp.first = (int64_t)(phy_stats.at(i).timestamp);
+        temp.second = (int64_t)phy_stats.at(i).tbsize;
+        if (temp.first >= traceBegin && traceBegin > 0)
+        {
+          new_stats_left.push_front(temp);
+          left++;
+        }
+      }
+    }
+    std::deque<std::pair<int64_t, int64_t>>::iterator it;
+    for (it = new_stats_left.begin(); it != new_stats_left.end(); it++)
+      new_stats.push_back(*it);
+    for (it = new_stats_right.begin(); it != new_stats_right.end(); it++)
+      new_stats.push_back(*it); //get every new_stats
+    new_stats_left.clear();
+    new_stats_right.clear();
+    if (new_stats.size() > 30)
+    {
+      for (uint64_t i = 0; i < new_stats.size(); i++)
+      {
+        cum_tbs += new_stats.at(i).second;
+      }
+      int64_t scale = new_stats.at(0).first - new_stats.at(new_stats.size() - 1).first;
+      updateTimescale = updateScale(scale, pause, new_stats);
+      new_stats.clear();
+      phy_throughput.push_back(static_cast<double>(cum_tbs) * 8000 / (updateTimescale)); //bps
+      //std::cout<<static_cast<double>(cum_tbs) * 8000 / (updateTimescale)/1000000<<"Mbps"<<" cumbs "<<cum_tbs<<" duration "<<updateTimescale/1000<<" diffDuration "<<(scale-updateTimescale)/1000<<std::endl;
+      cum_tbs = 0;
+    }
+    if (RequestTime > 250) //500
+    {
+      RequestTime = RequestTime - 250;
+      k++; //500
+    }
+    else
+    {
+      break;
+    }
+  }
+
+  //NS_LOG_INFO("===cum_tbs " << cum_tbs << "====Pause startTime " << (double)StartTime/1000 <<"====Pause endTime " << (double)EndTime/1000 << " =====updateTimescale " << (double)updateTimescale/1000 << "   =====InstantBW   " << phy_throughput / 1000000 << "Mbps");
+  if (phy_throughput.empty())
+    bandwidthEstimate = 0;
+  if ((phy_throughput.size() < 5) && (phy_throughput.size() > 0))
+  {
+    double aveBandwidth = 0;
+    for (std::deque<double>::iterator it = phy_throughput.begin(); it != phy_throughput.end(); it++)
+    {
+      aveBandwidth += *it;
+    }
+    bandwidthEstimate = (double)aveBandwidth / phy_throughput.size();
+  }
+  else
+  {
+    /*double temp,smooth_throughput,temp_ss;
+    for(std::deque<double>::reverse_iterator it=phy_throughput.rbegin();it!=phy_throughput.rend();it++){
+      if(it==phy_throughput.rbegin())
+     {
+         bandwidthEstimate=*it;
+         temp=*it;
+>>>>>>> f11b43c1c173b88e6911b86e2046eeadd2590f27
       }
     }
     for (uint64_t i = L; i > 0; i--)
@@ -509,6 +658,7 @@ double BWEstimate(std::deque<PhyRxStatsCalculator::Time_Tbs> phy_stats,std::vect
       {
         cum_tbs += new_stats.at(i).second;
       }
+<<<<<<< HEAD
       int64_t scale = new_stats.at(0).first - new_stats.at(new_stats.size() - 1).first;
       updateTimescale = updateScale(scale, pause, new_stats);
       phy_throughput.push_back(static_cast<double>(cum_tbs) * 8000 / (updateTimescale)); //bps
@@ -545,6 +695,32 @@ double BWEstimate(std::deque<PhyRxStatsCalculator::Time_Tbs> phy_stats,std::vect
     {
       double aveBandwidth = 0;
       for (std::deque<double>::iterator it = phy_throughput.begin(); it != phy_throughput.end(); it++)
+=======
+    }*/
+    double temp, temp_s, temp_ss;
+    for (std::deque<double>::reverse_iterator it = phy_throughput.rbegin(); it != phy_throughput.rend(); it++)
+    {
+      if (it == phy_throughput.rbegin())
+        temp_s = *it;
+      if (it == phy_throughput.rbegin() + 1)
+      {
+        temp_s = alpha * (*it) + (1 - alpha) * temp_s;
+        temp_ss = temp_s;
+      }
+      temp_s = alpha * (*it) + (1 - alpha) * temp_s;
+      temp = temp_ss;
+      temp_ss = alpha * temp_s + (1 - alpha) * temp_ss;
+      bandwidthEstimate = 2 * temp_s - temp_ss + (temp_ss - temp);
+    }
+  }
+  phy_throughput.clear();
+  /*
+  bool smooth=true;//true: old smooth /  false: holt smooth
+  if(smooth){
+    //   ************ do not understand*************
+    alpha=0.2;beta=0.8;
+    if (firstOfBwEstimate)
+>>>>>>> f11b43c1c173b88e6911b86e2046eeadd2590f27
       {
         aveBandwidth += *it;
       }
@@ -594,12 +770,21 @@ void TcpStreamClient::RequestRepIndex()
   userinfoAlgoReply userinfoanswer;
   bandwidthAlgoReply bandwidthanswer;
   bufferAlgoReply bufferanswer;
+<<<<<<< HEAD
   algorithmReply answer; 
   int64_t PauseStartTime = lastEndTime; //lastDownloadEnd==CurrentPauseStart
   int64_t PauseEndTime = Simulator::Now().GetMicroSeconds()/1000;
   //std::cout<<"NNNNNNNNNNNNNNNNNNNNNNNNN   "<<PauseStartTime<<"\t"<<PauseEndTime<<"\n";
   Simulator::Schedule(MicroSeconds((double)1), &GetPhyRate, cm_crossLayerInfo, PauseStartTime, PauseEndTime, traceBegin, m_clientId);
   
+=======
+  algorithmReply answer;
+
+  int64_t EndTime = m_downloadRequestSent / 1000;
+  int64_t StartTime = lastEndTime; //lastDownloadEnd==CurrentPauseStart
+  Simulator::Schedule(MicroSeconds((double)1), &GetPhyRate, cm_crossLayerInfo, StartTime, EndTime, traceBegin);
+  lastEndTime = m_transmissionEndReceivingSegment / 1000;
+>>>>>>> f11b43c1c173b88e6911b86e2046eeadd2590f27
   if (m_algoName == "tobasco" || m_algoName == "tobascoL")
   {
     userinfoanswer = userinfoAlgo->UserinfoAlgo(m_segmentCounter, m_clientId, 0, 0);
@@ -613,7 +798,11 @@ void TcpStreamClient::RequestRepIndex()
     userinfoanswer = userinfoAlgo->UserinfoAlgo(m_segmentCounter, m_clientId, 0, 0);
     bandwidthanswer = bandwidthAlgo->BandwidthAlgo(m_segmentCounter, m_clientId, bandwidthEstimate, 0);
     bufferanswer = bufferAlgo->BufferAlgo(m_segmentCounter, m_clientId, 0, 10000000);
+<<<<<<< HEAD
     answer = algo->GetNextRep(m_segmentCounter, m_clientId, bandwidthEstimate, 0);
+=======
+    answer = algo->GetNextRep(m_segmentCounter, m_clientId, bandwidthEstimate * 0.9, 0);
+>>>>>>> f11b43c1c173b88e6911b86e2046eeadd2590f27
     answer = UptoQoE(answer);
   }
   else if (m_algoName == "tomato")
@@ -622,7 +811,7 @@ void TcpStreamClient::RequestRepIndex()
     bandwidthanswer = bandwidthAlgo->BandwidthAlgo(m_segmentCounter, m_clientId, 0, 0);
     bufferanswer = bufferAlgo->BufferAlgo(m_segmentCounter, m_clientId, 0, 10000000);
     //answer = algo->GetNextRep(m_segmentCounter, m_clientId, bandwidthanswer.bandwidthEstimate, 0);
-    answer = algo->GetNextRep(m_segmentCounter, m_clientId, bandwidthEstimate, 0);
+    answer = algo->GetNextRep(m_segmentCounter, m_clientId, bandwidthEstimate * 0.9, 0);
     answer = UptoQoE(answer);
   }
   else if (m_algoName == "festive")
@@ -638,9 +827,13 @@ void TcpStreamClient::RequestRepIndex()
     userinfoanswer = userinfoAlgo->UserinfoAlgo(m_segmentCounter, m_clientId, 0, 0);
     bandwidthanswer = bandwidthAlgo->BandwidthAlgo(m_segmentCounter, m_clientId, 0, 0);
     bufferanswer = bufferAlgo->BufferAlgo(m_segmentCounter, m_clientId, 0, 10000000);
+<<<<<<< HEAD
     int64_t constRepIndex = 6; //setRepIndex
     //if(m_clientId==0) constRepIndex = 1;
     //if(m_clientId==1) constRepIndex = 2;
+=======
+    int64_t constRepIndex = 2; //setRepIndex
+>>>>>>> f11b43c1c173b88e6911b86e2046eeadd2590f27
     answer = algo->GetNextRep(m_segmentCounter, m_clientId, bandwidthEstimate, constRepIndex);
   }
   else if (m_algoName == "constbitrate2") //constant bitrate_background
@@ -650,6 +843,7 @@ void TcpStreamClient::RequestRepIndex()
     bufferanswer = bufferAlgo->BufferAlgo(m_segmentCounter, m_clientId, 0, 10000000);
     int64_t constRepIndex = 0; //setRepIndex
     answer = algo->GetNextRep(m_segmentCounter, m_clientId, bandwidthanswer.bandwidthEstimate, constRepIndex);
+<<<<<<< HEAD
   }
   else if (m_algoName == "qoe") //constant bitrate_background
   {
@@ -658,6 +852,8 @@ void TcpStreamClient::RequestRepIndex()
     bufferanswer = bufferAlgo->BufferAlgo(m_segmentCounter, m_clientId, 0, 10000000);
     answer = algo->GetNextRep(m_segmentCounter, m_clientId, bandwidthEstimate, 0);
     answer = UptoQoE(answer);
+=======
+>>>>>>> f11b43c1c173b88e6911b86e2046eeadd2590f27
   }
   else
   {
@@ -785,7 +981,11 @@ void TcpStreamClient::SegmentReceivedHandle()
 {
   NS_LOG_FUNCTION(this);
   m_transmissionEndReceivingSegment = Simulator::Now().GetMicroSeconds();
+<<<<<<< HEAD
   lastEndTime = (int64_t) m_transmissionEndReceivingSegment / 1000;
+=======
+
+>>>>>>> f11b43c1c173b88e6911b86e2046eeadd2590f27
   m_bufferData.timeNow.push_back(m_transmissionEndReceivingSegment);
   if (m_segmentCounter > 0)
   { //if a buffer underrun is encountered, the old buffer level will be set to 0, because the buffer can not be negative
@@ -885,11 +1085,19 @@ void TcpStreamClient::StartApplication(void)
     if (Ipv4Address::IsMatchingType(m_peerAddress) == true)
     {
       m_socket->Connect(InetSocketAddress(Ipv4Address::ConvertFrom(m_peerAddress), m_peerPort));
+<<<<<<< HEAD
     }
     else if (Ipv6Address::IsMatchingType(m_peerAddress) == true)
     {
       m_socket->Connect(Inet6SocketAddress(Ipv6Address::ConvertFrom(m_peerAddress), m_peerPort));
     }
+=======
+    }
+    else if (Ipv6Address::IsMatchingType(m_peerAddress) == true)
+    {
+      m_socket->Connect(Inet6SocketAddress(Ipv6Address::ConvertFrom(m_peerAddress), m_peerPort));
+    }
+>>>>>>> f11b43c1c173b88e6911b86e2046eeadd2590f27
     m_socket->SetConnectCallback(
         MakeCallback(&TcpStreamClient::ConnectionSucceeded, this),
         MakeCallback(&TcpStreamClient::ConnectionFailed, this));
